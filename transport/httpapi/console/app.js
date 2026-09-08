@@ -31,6 +31,7 @@ const enhancedSelects = new WeakMap();
 let openSelectControl = null;
 const renderedMessageIDs = new Set();
 const pendingMessageUpdates = new Map();
+const terminalMessageStatuses = new Set(["succeeded", "failed", "cancelled"]);
 let messageUpdateFrame = 0;
 let fallbackIDCounter = 0;
 const elements = {
@@ -480,7 +481,7 @@ function createMessageNode(message) {
   const body = document.createElement("div");
   populateMessageBody(body, message);
   article.append(meta, body);
-  if (message.role === "assistant" && message.status !== "pending") {
+  if (message.role === "assistant" && terminalMessageStatuses.has(message.status)) {
     const actions = document.createElement("div");
     actions.className = "message-actions";
     const copy = messageAction("copy", "复制回复");
@@ -589,18 +590,19 @@ function populateMessageBody(body, message, streamingPlainText = false) {
     pending.className = "thinking";
     pending.append("Agent 正在工作", ...[1, 2, 3].map(() => document.createElement("i")));
     body.append(pending);
-    if (state.lastActivity) {
-      const activity = document.createElement("span");
-      activity.className = "activity-line";
-      const dot = document.createElement("span"); dot.className = "status-dot online";
-      activity.append(dot, state.lastActivity);
-      body.append(activity);
-    }
   } else if (streamingPlainText && message.status === "streaming") {
     body.textContent = message.content;
   } else {
     renderRichText(body, message.content || (message.status === "cancelled" ? "本次执行已取消。" : "没有返回文本结果。"));
     if (message.status === "failed") body.classList.add("message-error");
+  }
+  const isCurrentRun = state.busy && message.runID && message.runID === state.currentRun?.id;
+  if (isCurrentRun && ["pending", "streaming"].includes(message.status) && state.lastActivity) {
+    const activity = document.createElement("span");
+    activity.className = "activity-line";
+    const dot = document.createElement("span"); dot.className = "status-dot online";
+    activity.append(dot, state.lastActivity);
+    body.append(activity);
   }
 }
 
@@ -1219,6 +1221,7 @@ async function submitMessage(event) {
 
 function watchRun(runID, assistantMessage, session) {
   let finished = false;
+  let checkingStatus = false;
   const source = new EventSource(`/v1/runs/${encodeURIComponent(runID)}/events/stream`);
   state.currentEventSource = source;
   source.addEventListener("realy.event", (message) => {
@@ -1236,10 +1239,19 @@ function watchRun(runID, assistantMessage, session) {
       completeRun(runID, assistantMessage, session);
     }
   });
-  source.onerror = () => {
-    source.close();
-    state.currentEventSource = null;
-    if (!finished) completeRun(runID, assistantMessage, session);
+  source.onerror = async () => {
+    if (finished || checkingStatus) return;
+    checkingStatus = true;
+    try {
+      const run = await api(`/v1/runs/${encodeURIComponent(runID)}`);
+      if (["succeeded", "failed", "cancelled"].includes(run.status)) {
+        finished = true;
+        source.close();
+        state.currentEventSource = null;
+        await completeRun(runID, assistantMessage, session);
+      }
+    } catch { /* EventSource will reconnect and resume from its last event ID. */ }
+    finally { checkingStatus = false; }
   };
 }
 
@@ -1252,7 +1264,7 @@ function applyAssistantEvent(event, assistantMessage) {
   const activity = activityLabel(event);
   if (activity) {
     state.lastActivity = activity;
-    if (assistantMessage.status === "pending") scheduleMessageUpdate(assistantMessage);
+    if (["pending", "streaming"].includes(assistantMessage.status)) scheduleMessageUpdate(assistantMessage);
   }
   if (event.type === "assistant.message.delta" && event.data?.delta) {
     assistantMessage.status = "streaming";
