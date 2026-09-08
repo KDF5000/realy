@@ -1,19 +1,56 @@
 services:
   postgres:
     image: postgres:17-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: realy
-      POSTGRES_PASSWORD: realy
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: realy
     ports:
-      - "127.0.0.1:55432:5432"
+      - "127.0.0.1:${REALY_POSTGRES_PORT:-55432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U realy -d realy"]
-      interval: 2s
+      interval: 5s
       timeout: 3s
       retries: 20
     volumes:
       - realy-postgres:/var/lib/postgresql/data
 
+  realy-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: realy-server:${REALY_VERSION:-local}
+    restart: unless-stopped
+    init: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      REALY_DATABASE_URL: postgres://realy:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/realy?sslmode=disable
+      REALY_ARTIFACT_BACKEND: file
+      REALY_ARTIFACT_ROOT: /var/lib/realy/artifacts
+      REALY_HOST_TOKEN: ${REALY_HOST_TOKEN:?set REALY_HOST_TOKEN in .env}
+      REALY_NODE_TOKEN: ${REALY_NODE_TOKEN:?set REALY_NODE_TOKEN in .env}
+      REALY_TENANT_ID: ${REALY_TENANT_ID:-default}
+      REALY_PROJECT_ID: ${REALY_PROJECT_ID:-default}
+    ports:
+      - "${REALY_BIND_ADDRESS:-0.0.0.0}:${REALY_SERVER_PORT:-8787}:8787"
+    volumes:
+      - realy-artifacts:/var/lib/realy/artifacts
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8787/health"]
+      interval: 10s
+      timeout: 3s
+      start_period: 10s
+      retries: 5
+    stop_grace_period: 30s
+
 volumes:
   realy-postgres:
+  realy-artifacts:

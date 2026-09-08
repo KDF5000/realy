@@ -53,6 +53,50 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
+## 安装 Realy Server
+
+推荐使用 Docker Compose 部署 Control Plane 和 PostgreSQL。数据库表会在 Server 启动时
+自动迁移，Run、Node 等状态保存在 PostgreSQL 卷，Artifact 保存在独立数据卷：
+
+```bash
+git clone https://github.com/KDF5000/realy.git
+cd realy
+cp .env.example .env
+```
+
+先修改 `.env` 中的数据库密码、Host Token 和 Node Token，再启动：
+
+```bash
+docker compose up -d --build --wait
+curl http://127.0.0.1:8787/health
+```
+
+Web 控制台位于 <http://127.0.0.1:8787/console/>，首次打开时输入 `.env` 中的
+`REALY_HOST_TOKEN`。查看状态和日志：
+
+```bash
+docker compose ps
+docker compose logs -f realy-server
+```
+
+停止服务不会删除数据；下次启动会继续使用现有数据卷：
+
+```bash
+docker compose down
+```
+
+Agent 机器不需要运行 Server 容器。在对应机器安装 Node，并把公开可访问的 Server 地址和
+同一个 Node Token 传给安装脚本：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/KDF5000/realy/main/install.sh \
+  | REALY_NODE_TOKEN='your-node-token' sh -s -- --server https://realy.example.com
+```
+
+生产环境建议在 `8787` 前配置带 TLS 的反向代理，仅开放 Realy Server 端口；Compose 中的
+PostgreSQL 端口只绑定到 `127.0.0.1`。如果不需要宿主机直接访问数据库，可以删除
+`postgres.ports` 配置。
+
 ## 当前可验证能力
 
 - Node 注册、心跳、容量和 Runtime Inventory

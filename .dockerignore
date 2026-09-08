@@ -1,7 +1,8 @@
-/bin/
-/.realy/
-.DS_Store
-bin/
+.git
+.github
+.realy
+bin
 artifact-output
 realy-node.json
 .env
+*.log
