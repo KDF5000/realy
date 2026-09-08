@@ -14,7 +14,7 @@ import (
 )
 
 func main() {
-	listen := flag.String("listen", ":8787", "HTTP listen address")
+	listen := flag.String("listen", defaultListenAddress(), "HTTP listen address (env: REALY_LISTEN or PORT)")
 	leaseTTL := flag.Duration("lease-ttl", 30*time.Second, "assignment lease duration")
 	nodeTimeout := flag.Duration("node-timeout", 15*time.Second, "time without heartbeat before a node is offline")
 	reconcileInterval := flag.Duration("reconcile-interval", 2*time.Second, "expired attempt recovery interval")
@@ -76,6 +76,16 @@ func main() {
 	server := &http.Server{Addr: *listen, Handler: handler, ReadHeaderTimeout: 10 * time.Second}
 	log.Printf("Realy control plane listening on %s", *listen)
 	log.Fatal(server.ListenAndServe())
+}
+
+func defaultListenAddress() string {
+	if value := os.Getenv("REALY_LISTEN"); value != "" {
+		return value
+	}
+	if value := os.Getenv("PORT"); value != "" {
+		return ":" + value
+	}
+	return ":8787"
 }
 
 func envOr(name, fallback string) string {

@@ -92,6 +92,48 @@ curl -fsSL https://raw.githubusercontent.com/KDF5000/realy/main/install.sh \
 
 ## 部署与运维
 
+### Railway
+
+Railway 是临时将 Realy Control Plane 暴露到公网最简单的方式。新账号可以使用 Railway 的试用额度；由于 Realy Node 会持续发送心跳，Server 和 PostgreSQL 会保持活跃，请留意额度消耗。
+
+1. 创建一个空的 Railway Project。
+2. 通过 **New → Database → PostgreSQL** 添加 PostgreSQL。
+3. 通过 **New → GitHub Repo** 添加另一个 Service，选择 `KDF5000/realy`。Railway 会自动识别仓库根目录的 `Dockerfile`。
+4. 在 Realy Service 中设置以下变量：
+
+   ```dotenv
+   REALY_DATABASE_URL=${{Postgres.DATABASE_URL}}
+   REALY_HOST_TOKEN=replace-with-a-long-random-host-token
+   REALY_NODE_TOKEN=replace-with-a-different-long-random-node-token
+   REALY_TENANT_ID=default
+   REALY_PROJECT_ID=default
+   REALY_ARTIFACT_BACKEND=file
+   REALY_ARTIFACT_ROOT=/tmp/realy-artifacts
+   ```
+
+   Railway 会注入 `PORT`，Realy 将自动监听该端口。如果数据库 Service 不是 `Postgres`，需要相应修改引用变量中的名称。
+
+5. 将 Health Check Path 设置为 `/health`，不要启用 Serverless/App Sleeping，然后在 **Settings → Networking** 中生成公网域名。
+6. 验证服务并打开控制台：
+
+   ```bash
+   curl https://<service>.up.railway.app/health
+   ```
+
+   ```text
+   https://<service>.up.railway.app/console/
+   ```
+
+临时验证时，文件 Artifact 会写入临时存储，在重新部署或重启后丢失。需要持久化 Artifact 时，请改用 `REALY_ARTIFACT_BACKEND=s3`；PostgreSQL 数据会独立持久化。
+
+使用公网地址接入远程 Node：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/KDF5000/realy/main/install.sh \
+  | REALY_NODE_TOKEN='与Server相同的Node Token' \
+    sh -s -- --server https://<service>.up.railway.app --install-service
+```
+
 ### Server 管理
 
 ```bash

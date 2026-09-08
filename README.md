@@ -92,6 +92,48 @@ Open **Agents** in the Web Console, select a runtime and model, configure a work
 
 ## Deployment
 
+### Railway
+
+Railway is the simplest way to put a temporary Realy control plane on the public internet. New accounts can use Railway's trial credits; keep an eye on usage because Realy Node heartbeats keep the Server and PostgreSQL active.
+
+1. Create an empty Railway project.
+2. Add a PostgreSQL database with **New → Database → PostgreSQL**.
+3. Add another service with **New → GitHub Repo** and select `KDF5000/realy`. Railway detects the root `Dockerfile` automatically.
+4. Add these variables to the Realy service:
+
+   ```dotenv
+   REALY_DATABASE_URL=${{Postgres.DATABASE_URL}}
+   REALY_HOST_TOKEN=replace-with-a-long-random-host-token
+   REALY_NODE_TOKEN=replace-with-a-different-long-random-node-token
+   REALY_TENANT_ID=default
+   REALY_PROJECT_ID=default
+   REALY_ARTIFACT_BACKEND=file
+   REALY_ARTIFACT_ROOT=/tmp/realy-artifacts
+   ```
+
+   Railway injects `PORT`; Realy listens on it automatically. If the database service has a different name, replace `Postgres` in the reference variable.
+
+5. Set the health check path to `/health`, leave Serverless/App Sleeping disabled, and generate a public domain under **Settings → Networking**.
+6. Verify the deployment and open the Console:
+
+   ```bash
+   curl https://<service>.up.railway.app/health
+   ```
+
+   ```text
+   https://<service>.up.railway.app/console/
+   ```
+
+For a temporary validation deployment, file artifacts are written to ephemeral storage and disappear after a redeploy or restart. Use `REALY_ARTIFACT_BACKEND=s3` for durable artifacts. PostgreSQL remains persistent independently.
+
+Connect remote Nodes with the public URL:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/KDF5000/realy/main/install.sh \
+  | REALY_NODE_TOKEN='the-same-node-token-as-the-server' \
+    sh -s -- --server https://<service>.up.railway.app --install-service
+```
+
 ### Server operations
 
 ```bash
