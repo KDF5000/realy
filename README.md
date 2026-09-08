@@ -1,70 +1,39 @@
 # Realy
 
-Realy 是一个多机器 Agent Runtime 管理平台。业务系统只负责提交任务、声明业务能力并
-消费结果；Realy 负责 Node、Runtime、调度、执行、权限边界和事件。
+English | [简体中文](README.zh-CN.md)
+
+Realy is a distributed control plane for managing AI agent runtimes across machines. Applications submit work and expose business capabilities; Realy handles runtime discovery, scheduling, execution, isolation, durable events, and results.
 
 ```text
-Multica / 其他业务系统
-        │ Host SDK
+Application / Host
+        │ Go SDK or HTTP API
         ▼
-Realy Control Plane
+Realy Server ── PostgreSQL / Artifact Store
         │ Node Protocol
         ▼
-Realy Node ──> Codex / Claude / 自定义 Runtime
+Realy Node ── Codex / Trae / Custom Runtime
         │
         └── Capability Binding: CLI / HTTP / RPC / Go
 ```
 
-## 安装 Realy Node
+## Highlights
 
-macOS 或 Linux 可以从 GitHub Release 一条命令安装。通过 `--server` 指定 Node 要连接的
-Realy Server：
+- Multi-machine Node registration, heartbeats, capacity, and runtime inventory
+- Fixed runtime-instance assignment or automatic scheduling by provider and capability
+- Native Codex and Trae runtime adapters with streaming output and model discovery
+- Durable runs, attempts, leases, retries, cancellation, timeouts, and ordered SSE events
+- Local, temporary, Git mirror, and Git worktree workspace providers
+- Artifact storage on local volumes or S3-compatible object storage
+- Application-defined capabilities through process, CLI, HTTP, RPC, or in-process bindings
+- Host/Node token separation plus tenant and project isolation
+- Embedded Web Agent Playground and the `realyctl` terminal client
+- PostgreSQL-backed coordination for multiple Nodes and Server restarts
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/KDF5000/realy/main/install.sh \
-  | sh -s -- --server https://realy.example.com --install-service
-```
+## Quick start
 
-脚本支持 Intel/Apple Silicon 和 Linux amd64/arm64，下载后会验证 SHA-256，并安装
-`realy-node`、`realy-tool` 和 `realyctl` 到 `~/.local/bin`。它会自动发现 PATH 中的 Codex、
-`traex` 或 `trae-cli`，配置默认写入 `~/.config/realy/node.json`，运行数据放在
-`~/.cache/realy`。随后启动：
+### 1. Start Realy Server
 
-```bash
-~/.local/bin/realy-node -config ~/.config/realy/node.json
-```
-
-推荐传入 `--install-service`：Linux 会安装并启动用户级 systemd service，macOS 会安装并
-启动 LaunchAgent。Node 仍以前台进程方式运行，由操作系统负责开机启动、异常重启、日志和
-退出信号。Linux 查看日志使用 `journalctl --user -u realy-node -f`，管理服务使用
-`systemctl --user status|restart|stop realy-node`；如需用户未登录时也随系统启动，再执行
-`sudo loginctl enable-linger "$USER"`。macOS 日志位于 `~/.cache/realy/logs/`，服务可用
-`launchctl print gui/$(id -u)/dev.realy.node` 查看。
-
-启用 Node Token 时建议通过环境变量传递，避免 Token 出现在 Shell 历史中：
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/KDF5000/realy/main/install.sh \
-  | REALY_NODE_TOKEN=node-secret sh -s -- --server https://realy.example.com --install-service
-```
-
-可以使用 `--node-id`、`--capacity`、`--runtime auto|codex|trae|both`、`--version`、
-`--install-dir`、`--config` 和 `--install-service` 自定义安装。重复安装默认保留现有配置；
-传入 `--force` 时会先创建带时间戳的备份再生成新配置。服务会保存安装时的 PATH，确保由
-npm、nvm 等方式安装的 Runtime CLI 在非交互登录环境中仍可发现 Node.js。
-
-推送 `v*` Tag 后，[Release workflow](.github/workflows/release.yml) 会运行测试并发布四个平台
-压缩包及 `checksums.txt`：
-
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-## 安装 Realy Server
-
-推荐使用 Docker Compose 部署 Control Plane 和 PostgreSQL。数据库表会在 Server 启动时
-自动迁移，Run、Node 等状态保存在 PostgreSQL 卷，Artifact 保存在独立数据卷：
+Docker Compose starts Realy Server and PostgreSQL. Schema migrations run automatically when the Server starts.
 
 ```bash
 git clone https://github.com/KDF5000/realy.git
@@ -72,69 +41,168 @@ cd realy
 cp .env.example .env
 ```
 
-先修改 `.env` 中的数据库密码、Host Token 和 Node Token，再启动：
+Set a database password and two independent tokens in `.env`:
+
+```dotenv
+POSTGRES_PASSWORD=replace-with-a-long-random-password
+REALY_HOST_TOKEN=replace-with-a-long-random-host-token
+REALY_NODE_TOKEN=replace-with-a-long-random-node-token
+```
+
+Start the stack and verify it:
 
 ```bash
 docker compose up -d --build --wait
 curl http://127.0.0.1:8787/health
 ```
 
-Web 控制台位于 <http://127.0.0.1:8787/console/>，首次打开时输入 `.env` 中的
-`REALY_HOST_TOKEN`。查看状态和日志：
+The expected response is:
+
+```json
+{"status":"ok"}
+```
+
+Open the Web Console at <http://127.0.0.1:8787/console/> and enter `REALY_HOST_TOKEN` when prompted.
+
+### 2. Connect a Node
+
+Run this on a machine that already has Codex, `traex`, or `trae-cli` installed. Replace the Server URL with an address reachable from that machine; do not use `127.0.0.1` for a remote Server.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/KDF5000/realy/main/install.sh \
+  | REALY_NODE_TOKEN='the-same-node-token-as-the-server' \
+    sh -s -- --server https://realy.example.com --install-service
+```
+
+The installer supports macOS and Linux on AMD64 and ARM64. It verifies the release checksum, installs `realy-node`, `realy-tool`, and `realyctl` under `~/.local/bin`, discovers supported runtime CLIs from `PATH`, and writes the Node configuration to `~/.config/realy/node.json`.
+
+`--install-service` installs and starts a user-level system service:
+
+- Linux: systemd user service
+- macOS: LaunchAgent
+
+Once connected, the Node and its runtimes appear in the Console's **Runtimes** view.
+
+### 3. Create an Agent
+
+Open **Agents** in the Web Console, select a runtime and model, configure a workspace if needed, and start a conversation. An Agent can either:
+
+- bind to one exact runtime instance on one Node; or
+- use automatic scheduling across compatible runtime instances.
+
+## Deployment
+
+### Server operations
 
 ```bash
 docker compose ps
 docker compose logs -f realy-server
-```
-
-停止服务不会删除数据；下次启动会继续使用现有数据卷：
-
-```bash
 docker compose down
 ```
 
-Agent 机器不需要运行 Server 容器。在对应机器安装 Node，并把公开可访问的 Server 地址和
-同一个 Node Token 传给安装脚本：
+`docker compose down` preserves PostgreSQL and Artifact volumes. To update a source-built deployment:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/KDF5000/realy/main/install.sh \
-  | REALY_NODE_TOKEN='your-node-token' sh -s -- --server https://realy.example.com --install-service
+git pull
+docker compose up -d --build --wait realy-server
 ```
 
-生产环境建议在 `8787` 前配置带 TLS 的反向代理，仅开放 Realy Server 端口；Compose 中的
-PostgreSQL 端口只绑定到 `127.0.0.1`。如果不需要宿主机直接访问数据库，可以删除
-`postgres.ports` 配置。
+By default, Realy Server is published on port `8787`, while PostgreSQL is bound only to `127.0.0.1:55432`. In production, place a TLS reverse proxy in front of port `8787` and avoid exposing PostgreSQL publicly.
 
-## 当前可验证能力
+Artifacts use a persistent Docker volume by default. Realy Server can also use S3-compatible storage through `REALY_ARTIFACT_BACKEND=s3` and the `REALY_S3_*` environment variables.
 
-- Node 注册、心跳、容量和 Runtime Inventory
-- 支持固定 Runtime 实例，或根据 Provider、Node Label 和 Capability 自动调度任务
-- Run、Attempt、Lease 和有序事件
-- Host SDK 与 HTTP Transport
-- 用户自定义 Exec、HTTP、RPC、进程内 Capability Binding
-- Run 级 Grant、资源范围和并发幂等检查
-- Runtime 本地 Tool Bridge，以及统一的 `realy-tool`
-- 通用非交互式 Runtime Command Adapter
-- 真实 Codex Runtime：`codex exec`、JSONL 事件、最终消息与 sandbox
-- 真实 TraeCode Runtime：`traex`/`trae-cli exec`、JSONL、最终消息、权限模式与 sandbox
-- `realyctl` 终端工作台：Runtime Inventory、Run 下发、状态与事件跟踪
-- PostgreSQL Control Plane Store：持久化 Node、Run、Attempt、Event 和原子任务领取
-- 运行中 Lease 自动续租、Node 离线状态和过期 Attempt 恢复
-- 显式 `max_attempts`/`backoff` 重试策略，以及旧 Lease fencing
-- 持久化任务取消、运行超时和 Node 终止确认
-- 基于有序 Event Sequence 的 SSE 实时事件流和断线续传
-- Capacity 并发执行、优雅 drain 和 Unix 进程组回收
-- temp/local/Git mirror + worktree Workspace Provider
-- Artifact 上传、下载、SHA-256、本地文件与 S3 兼容 Blob Store
-- PostgreSQL Capability Call reservation、重放和审计
-- Host/Node Token、Tenant/Project 隔离
-- Run 列表、Attempt 历史、Artifact 与 Interaction API
-- Runtime 版本约束与周期健康探测
-- Session ID，以及通用 Input/Approval 阻塞恢复模型
-- Multica 源码级 Host Adapter 和 `multica capability invoke` Binding
-- PostgreSQL + HTTP 多 Node 失联恢复 E2E
+### Node service operations
 
-## 验证
+Linux:
+
+```bash
+systemctl --user status realy-node
+systemctl --user restart realy-node
+journalctl --user -u realy-node -f
+sudo loginctl enable-linger "$USER"
+```
+
+Enabling linger keeps the user service running after logout and starts it without an interactive login.
+
+macOS:
+
+```bash
+launchctl print gui/$(id -u)/dev.realy.node
+tail -f ~/.cache/realy/logs/node.log
+```
+
+Run the installer without `--install-service` to keep the Node in the foreground:
+
+```bash
+~/.local/bin/realy-node -config ~/.config/realy/node.json
+```
+
+Useful installer options include `--node-id`, `--capacity`, `--runtime auto|codex|trae|both`, `--version`, `--install-dir`, `--config`, and `--force`. Existing configuration is preserved unless `--force` is set, in which case the installer creates a timestamped backup.
+
+## Terminal client
+
+Build `realyctl` from source, or use the binary installed by `install.sh`:
+
+```bash
+make build-realyctl
+./bin/realyctl runtime list
+./bin/realyctl run submit --provider codex --prompt "Inspect this repository"
+./bin/realyctl run submit --provider codex --runtime-id developer-node/codex --prompt "Run on this exact runtime"
+./bin/realyctl run submit --provider codex --model model-a --prompt "Use a specific model"
+./bin/realyctl run submit --provider codex --max-attempts 2 --retry-backoff 2s --prompt "Retry recoverable work"
+./bin/realyctl run watch <run-id>
+./bin/realyctl run cancel <run-id> --reason "No longer needed"
+./bin/realyctl run list
+./bin/realyctl run attempts <run-id>
+./bin/realyctl run artifacts <run-id>
+./bin/realyctl artifact download <artifact-id> ./result.bin
+./bin/realyctl run interactions <run-id>
+./bin/realyctl interaction resolve <interaction-id> '{"approved":true}'
+```
+
+Set `REALY_SERVER_URL` or pass the global `--server` option to connect to another control plane. `run submit` watches ordered SSE events by default; use `--watch=false` to return after submission.
+
+## Core concepts
+
+### Runs and leases
+
+A submitted task becomes a Run. A compatible Node atomically claims an Attempt and receives a renewable lease. Lease fencing prevents stale workers from completing reassigned work. If a Node disappears, the reconciler marks the Attempt as lost and applies the Run's retry policy.
+
+Cancellation and timeouts use the same durable path: the Server records the request, the Node receives it during lease renewal, terminates the runtime process, and acknowledges the final state.
+
+### Workspaces
+
+Agents may use temporary directories, existing local directories, Git mirrors, or isolated worktrees. A runtime fixed to a remote Node resolves local workspace paths on that Node, not on the Server.
+
+### Capabilities
+
+Applications expose domain operations without adding domain semantics to Realy Core. A runtime calls `realy-tool`, Realy validates the Run grant and resource scope, and then invokes the configured binding.
+
+Supported binding styles include:
+
+- application-provided CLI processes;
+- HTTP endpoints;
+- RPC adapters; and
+- in-process Go providers.
+
+`realy-tool` relies on short-lived Run-scoped environment values injected by the Node. Business credentials remain inside the selected binding and are not exposed directly to the agent runtime.
+
+### Events and interactions
+
+Events are persisted before delivery and receive an ordered sequence number. The SSE endpoint supports both `after={sequence}` and the standard `Last-Event-ID` header, allowing clients to reconnect without losing or duplicating events.
+
+Long-running runtimes can create approval or input interactions, pause, and resume after a Host resolves them.
+
+## Runtime notes
+
+- Codex and Trae use `"protocol": "app-server"` for incremental `assistant.message.delta` events and runtime model discovery.
+- The legacy `exec` protocol remains available for compatible non-interactive CLIs but only produces complete messages.
+- Trae exec mode cannot use `permission_mode=default`, because a headless process cannot ask for approval. Omit it for the headless default, or use `bypass_permissions` or a headless-compatible `custom` policy.
+- Runtime subprocesses receive a restricted environment by default. Add variables explicitly through `pass_env` or `env` in the Node configuration.
+
+## Development
+
+Requirements: Go 1.26 and Docker with Compose.
 
 ```bash
 make verify
@@ -144,7 +212,9 @@ make trae-smoke
 make codex-capability-smoke
 ```
 
-生产 Control Plane 默认要求 PostgreSQL；`-memory` 只用于测试和临时 demo：
+`codex-smoke`, `trae-smoke`, and `codex-capability-smoke` invoke locally authenticated AI runtimes and may consume provider usage.
+
+Run the Server from source with PostgreSQL:
 
 ```bash
 make db-up
@@ -153,121 +223,18 @@ go run ./cmd/realy-server -listen 127.0.0.1:8787
 make postgres-test
 ```
 
-启用鉴权（两类 Token 必须同时配置）：
+Use `-memory` only for tests and temporary demos. Production deployments require PostgreSQL.
 
-```bash
-export REALY_HOST_TOKEN=host-secret
-export REALY_NODE_TOKEN=node-secret
-export REALY_TENANT_ID=local
-export REALY_PROJECT_ID=multica
-```
+When authentication is enabled, both `REALY_HOST_TOKEN` and `REALY_NODE_TOKEN` must be configured. `realyctl` reads `REALY_HOST_TOKEN`; a Node reads the token from its configuration or `REALY_NODE_TOKEN`.
 
-Node 配置 `token` 或读取 `REALY_NODE_TOKEN`；`realyctl` 读取 `REALY_HOST_TOKEN`。Artifact
-默认写入 `./.realy/artifacts`，也可用 `-artifact-backend s3` 和 `REALY_S3_*` 切换到
-S3/MinIO。
+The Web Agent Playground is embedded into the Server binary. After changing files under `transport/httpapi/console/`, rebuild or restart `realy-server` so Go can embed the updated assets. Agent profiles and the conversation index currently live in browser local storage; Runs, events, results, and artifacts are persisted by the Realy API.
 
-Demo 会启动临时 Control Plane 和 Multica Capability API，注册两个不同 Runtime 的
-Node，验证调度器不会把任务发给不兼容的 Node，然后由匹配 Node 完成任务。
+Pushing a `v*` tag runs the [release workflow](.github/workflows/release.yml), verifies the project, and publishes checksum-protected archives for Linux and macOS on AMD64 and ARM64.
 
-`make codex-smoke` 会使用本机已有的 Codex CLI 登录态执行一次真实的只读任务，因此会
-产生一次实际 Codex 用量。成功时 Result Summary 为 `REALY_CODEX_OK`。
+## Documentation
 
-`make trae-smoke` 使用本机 TraeCode CLI 登录态执行同样的真实只读链路，会产生一次实际
-Trae 用量。它优先使用 `traex`，Node 运行时在未安装该别名时会回退到 `trae-cli`；成功时
-Result Summary 为 `REALY_TRAE_OK`。
+- [Architecture and design](docs/design.md)
+- [Example Node configuration](examples/realy-node.example.json)
+- [Releases](https://github.com/KDF5000/realy/releases)
 
-Trae `exec` 不能使用会发起交互审批的 `permission_mode=default`。配置中应省略该字段以
-采用 headless 默认值，或明确使用 `bypass_permissions`/`custom`；Realy 会自动把旧的
-`default` 配置归一化为省略。
-
-Codex/Trae 的逐 token 输出使用 Runtime 配置 `"protocol": "app-server"`。适配器会将
-不同 Provider 的通知归一化为 `assistant.message.delta` 事件；`exec` 协议仍可用于兼容
-只产生完整消息的旧 CLI，但无法提供真正的文本增量。
-
-`make codex-capability-smoke` 会进一步验证完整调用链：真实 Codex 执行 `realy-tool`，
-Realy 校验 Run Grant 和资源范围，再调用用户提供的 CLI Binding。它同样会产生实际
-Codex 用量，成功时事件中必须出现 `capability.succeeded`。
-
-## 可执行程序
-
-```bash
-go run ./cmd/realy-server -listen :8787 # 需要 REALY_DATABASE_URL
-go run ./cmd/realy-node -config ./examples/realy-node.example.json
-```
-
-### Web Agent Playground
-
-Playground 已嵌入 `realy-server`，不需要单独启动前端开发服务器。Control Plane 和
-Node 启动后访问 <http://127.0.0.1:8787/console/>。启用鉴权时，页面首次打开会要求
-输入 `REALY_HOST_TOKEN`，Token 会写入 HttpOnly Cookie，不保存在前端存储中。
-
-Agent Profile 和对话索引目前保存在浏览器 localStorage；真实 Run、事件、结果和产物仍
-由 Realy API 持久化到 PostgreSQL。修改 `transport/httpapi/console/` 下的前端文件后需
-重启 `realy-server`，Go embed 才会包含最新资源。
-
-Agent 创建时可以固定到某个 Runtime 实例，也可以选择按 Provider 自动调度。固定实例离线或
-容量已满时，任务会继续等待该实例，不会自动切换到其他机器；自动调度则可由任意兼容且可用
-的实例领取。Agent 还可覆盖 Runtime 的默认模型。Codex 和 Trae Node 启动时会通过 `app-server model/list`
-自动发现模型并向控制台公开；配置中的 `model` 可覆盖默认值，`models` 可补充额外模型，
-Agent Playground 只允许选择 Runtime 已公开的模型。
-
-构建并使用终端工作台：
-
-```bash
-make build-realyctl
-./bin/realyctl runtime list
-./bin/realyctl run submit --provider codex --prompt "检查当前工作目录"
-./bin/realyctl run submit --provider codex --runtime-id developer-macbook/codex --prompt "固定到指定 Runtime"
-./bin/realyctl run submit --provider codex --model model-a --prompt "使用指定模型执行"
-./bin/realyctl run submit --provider codex --max-attempts 2 --retry-backoff 2s --prompt "执行可恢复任务"
-./bin/realyctl run submit --provider codex --timeout 30m --prompt "执行限时任务"
-./bin/realyctl run submit --prompt "读取 MUL-42" --grant issue.read@1:read:MUL-42
-./bin/realyctl run watch <run-id>
-./bin/realyctl run cancel <run-id> --reason "不再需要"
-./bin/realyctl run list
-./bin/realyctl run attempts <run-id>
-./bin/realyctl run artifacts <run-id>
-./bin/realyctl artifact download <artifact-id> ./result.bin
-./bin/realyctl run interactions <run-id>
-./bin/realyctl interaction resolve <interaction-id> '{"approved":true}'
-```
-
-`run submit` 默认通过 SSE 持续输出有序事件并等待完成；使用 `--watch=false` 只下发任务。通过
-`REALY_SERVER_URL` 或全局 `--server` 可以连接其他机器上的 Control Plane。
-`run watch` 使用最后收到的 Sequence 自动续传，重连不会重复输出或遗漏已持久化事件。
-Node 执行期间会独立发送心跳并自动续租 Assignment；`runtime list` 的 `STATE` 列根据
-最后心跳显示 `online` 或 `offline`。运行中 Lease 过期时，Control Plane 会把旧 Attempt
-标记为 `lost`，并按任务声明的重试策略创建新的 Attempt。
-
-取消请求会先持久化为 `cancelling`，再通过下一次 Lease 续租下发给 Node。Node 停止
-Runtime 后确认取消，最终状态变为 `cancelled`；Node 失联时由 Reconciler 在 Lease 过期后
-完成回收。`--timeout` 使用同一条取消路径。
-
-SSE 接口为 `GET /v1/runs/{run_id}/events/stream?after={sequence}`，同时支持标准
-`Last-Event-ID` 请求头。事件先持久化到 PostgreSQL，再向客户端发送，因此 Server 重启或
-连接中断不会丢失事件。
-
-`realy-tool` 由 Runtime 子进程调用，例如
-`realy-tool call --resource MUL-42 --idempotency read-1 issue.read`。它依赖 Node 为当前
-Run 注入的短生命周期环境变量，不能作为普通终端命令脱离 Run 使用。业务 CLI、HTTP
-Token 等不会直接暴露给 Agent。
-
-Codex Runtime 使用工作目录内的私有文件邮箱进行桥接，以兼容禁止本机网络访问的
-Codex sandbox；其他 Runtime 仍可使用 loopback HTTP Bridge。两者对 Agent 暴露相同的
-`realy-tool` 命令和 Capability 协议。
-
-Codex 子进程默认使用环境变量白名单，不继承 Node 的完整环境；Multica Token 等业务
-凭据只传给对应 Binding。额外 Runtime 环境必须通过 Node 配置里的 `pass_env` 或 `env`
-显式声明。
-
-Multica 已提供首个宿主适配入口：
-
-```bash
-multica capability invoke --protocol realy-v1
-```
-
-该命令从 stdin 接收 Realy `CapabilityRequest`，向 stdout 返回 `{"output": ...}` 或
-`{"error": ...}`。当前实现 `issue.read@1`，因此 Realy Core 不需要知道 issue、workspace
-或 Multica API 的任何语义。
-
-完整设计见 [docs/design.md](docs/design.md)。
+The first Host integration is the Multica adapter. It exposes `issue.read@1` through `multica capability invoke --protocol realy-v1`, while Realy Core remains unaware of issue or project-management semantics.
