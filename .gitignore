@@ -1,0 +1,6 @@
+/bin/
+/.realy/
+.DS_Store
+bin/
+artifact-output
+realy-node.json

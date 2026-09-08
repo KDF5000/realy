@@ -1,0 +1,54 @@
+{
+  "server": "http://127.0.0.1:8787",
+  "workspace_root": "/tmp/realy-workspaces",
+  "node": {
+    "id": "developer-macbook",
+    "labels": {
+      "os": "darwin",
+      "pool": "engineering"
+    },
+    "capacity": 2,
+    "runtimes": []
+  },
+  "runtimes": [
+    {
+      "id": "developer-macbook/codex",
+      "kind": "codex",
+      "provider": "codex",
+      "protocol": "app-server",
+      "command": "codex",
+      "tool_dir": "./bin",
+      "sandbox": "workspace-write",
+      "work_root": "/tmp/realy-runs",
+      "ephemeral": true
+    },
+    {
+      "id": "developer-macbook/trae",
+      "kind": "trae",
+      "provider": "trae",
+      "protocol": "app-server",
+      "command": "traex",
+      "tool_dir": "./bin",
+      "sandbox": "workspace-write",
+      "work_root": "/tmp/realy-runs",
+      "ephemeral": true
+    }
+  ],
+  "bindings": [
+    {
+      "name": "issue.read",
+      "version": "1",
+      "kind": "exec",
+      "command": "multica",
+      "args": ["capability", "invoke", "--protocol", "realy-v1"],
+      "inherit_env": true
+    },
+    {
+      "name": "repository.search",
+      "version": "1",
+      "kind": "http",
+      "endpoint": "https://multica.example.com/realy/capabilities",
+      "token_env": "MULTICA_REALY_TOKEN"
+    }
+  ]
+}

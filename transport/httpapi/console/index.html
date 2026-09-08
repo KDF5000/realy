@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#f8f8f7" />
+    <title>Runtimes · Realy</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar">
+        <div class="brand-row">
+          <a class="brand" href="/console/" aria-label="Realy Playground">
+            <span class="brand-mark" aria-hidden="true">R</span>
+            <span translate="no">realy<span class="brand-caption">Agent workspace</span></span>
+          </a>
+          <button class="icon-button mobile-only" id="close-sidebar" aria-label="关闭侧栏">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+          </button>
+        </div>
+
+        <nav class="app-nav" aria-label="主导航">
+          <a href="#chat" data-route="chat" class="app-nav-item active">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18.5 3.5 21v-5A8 8 0 1 1 7 19h-1Z" /></svg><span>对话</span>
+          </a>
+          <a href="#agents" data-route="agents" class="app-nav-item">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3"/><path d="M6 20a6 6 0 0 1 12 0M4 4v4M2 6h4" /></svg><span>Agents</span><span class="nav-count" id="agent-count">0</span>
+          </a>
+          <a href="#runtimes" data-route="runtimes" class="app-nav-item">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01" /></svg><span>Runtimes</span><span class="nav-count" id="nav-runtime-count">0</span>
+          </a>
+        </nav>
+
+        <button class="new-chat-button chat-only" id="new-chat">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          新对话
+        </button>
+
+        <nav class="conversation-nav chat-only" aria-label="对话历史">
+          <div class="section-label">最近对话</div>
+          <div id="session-list" class="session-list"></div>
+        </nav>
+
+        <div class="sidebar-footer">
+          <button class="runtime-summary" id="open-runtimes">
+            <span class="status-dot" id="runtime-dot"></span>
+            <span class="runtime-copy">
+              <strong id="runtime-count">正在连接</strong>
+              <small>Runtime 状态</small>
+            </span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+          </button>
+        </div>
+      </aside>
+
+      <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
+      <main class="main-panel" id="main-content" tabindex="-1">
+        <header class="management-topbar hidden" id="management-topbar">
+          <button class="icon-button mobile-only" id="open-management-sidebar" aria-label="打开导航"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+          <div class="breadcrumb"><span>工作台</span><span aria-hidden="true">/</span><strong id="breadcrumb-page">Runtimes</strong></div>
+          <span class="connection-status" id="connection-status"><span class="status-dot"></span>正在连接…</span>
+        </header>
+        <header class="topbar chat-only">
+          <button class="icon-button mobile-only" id="open-sidebar" aria-label="打开侧栏">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+          </button>
+          <button class="agent-switcher" id="agent-switcher" aria-haspopup="dialog">
+            <span class="agent-avatar" id="agent-avatar">R</span>
+            <span class="agent-title-wrap">
+              <strong id="agent-name">选择 Agent</strong>
+              <small id="agent-runtime">创建一个配置后开始对话</small>
+            </span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" /></svg>
+          </button>
+          <div class="topbar-actions">
+            <button class="icon-button" id="open-details" aria-label="运行详情" title="运行详情">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01" /></svg>
+            </button>
+          </div>
+        </header>
+
+        <section class="chat-scroll chat-only" id="chat-scroll" aria-live="polite">
+          <div class="chat-column">
+            <div class="empty-state" id="empty-state">
+              <div class="empty-orbit" aria-hidden="true"><span>R</span></div>
+              <h1>把任务交给你的 Agent</h1>
+              <p>选择 Runtime，写下工作方式，然后像聊天一样开始一次真实执行。</p>
+              <button class="primary-button" id="empty-create-agent">创建第一个 Agent</button>
+              <div class="prompt-suggestions hidden" id="prompt-suggestions">
+                <button type="button" data-prompt="请先了解当前项目的结构，梳理主要模块及它们之间的关系。"><span class="suggestion-icon" aria-hidden="true">⌘</span><strong>了解项目</strong><small>梳理结构与关键模块</small></button>
+                <button type="button" data-prompt="请检查当前项目的代码，找出值得优先改进的问题，并说明原因。"><span class="suggestion-icon" aria-hidden="true">↗</span><strong>审查代码</strong><small>发现问题与改进机会</small></button>
+                <button type="button" data-prompt="请根据当前项目的实现，整理一份简洁的使用说明与启动步骤。"><span class="suggestion-icon" aria-hidden="true">≡</span><strong>整理文档</strong><small>让知识更容易传递</small></button>
+              </div>
+            </div>
+            <div class="messages" id="messages"></div>
+            <div class="chat-end-anchor" id="chat-end-anchor" aria-hidden="true"></div>
+          </div>
+        </section>
+
+        <footer class="composer-wrap chat-only">
+          <form class="composer" id="composer">
+            <textarea id="prompt" rows="1" maxlength="20000" placeholder="给 Agent 一个任务…" aria-label="消息"></textarea>
+            <div class="composer-footer">
+              <span class="composer-hint" id="composer-hint">Enter 发送 · Shift + Enter 换行</span>
+              <button class="send-button" id="send" type="submit" aria-label="发送消息">
+                <svg class="send-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6" /></svg>
+                <svg class="stop-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="8" height="8" rx="1" /></svg>
+              </button>
+            </div>
+          </form>
+          <p class="footer-note">Agent 会在配置的工作区内执行，请检查重要结果。</p>
+        </footer>
+
+        <section class="page-view hidden" id="agents-view" aria-labelledby="agents-heading">
+          <div class="page-header">
+            <div><span class="eyebrow">你的执行伙伴</span><h1 id="agents-heading">Agents</h1><p>为不同工作配置专属 Agent，随时开始下一次对话。</p></div>
+            <button class="primary-button button-with-icon" id="page-create-agent"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12" /></svg>创建 Agent</button>
+          </div>
+          <div class="resource-toolbar">
+            <div class="summary-strip" id="agent-summary"></div>
+            <div class="toolbar-controls">
+              <label class="search-field"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><input type="search" id="agent-search" name="agent_search" aria-label="搜索 Agent" placeholder="搜索 Agent…" autocomplete="off" /></label>
+              <select id="agent-sort" name="agent_sort" aria-label="Agent 排序方式"><option value="recent">最近使用</option><option value="name">按名称</option><option value="created">创建时间</option></select>
+            </div>
+          </div>
+          <div class="agent-table-shell">
+            <table class="agent-table">
+              <caption class="visually-hidden">Agent 配置列表</caption>
+              <thead><tr><th scope="col">Agent</th><th scope="col">Runtime</th><th scope="col">工作区</th><th scope="col">对话</th><th scope="col">状态</th><th scope="col"><span class="visually-hidden">操作</span></th></tr></thead>
+              <tbody id="agents-grid"></tbody>
+            </table>
+          </div>
+          <nav class="agent-pagination hidden" id="agent-pagination" aria-label="Agent 列表分页"></nav>
+        </section>
+
+        <section class="page-view hidden" id="runtimes-view" aria-labelledby="runtimes-heading">
+          <div class="page-header">
+            <div><span class="eyebrow">基础设施</span><h1 id="runtimes-heading">Runtimes</h1><p>连接机器与 AI Runtime，让每一次执行都有处可去。</p></div>
+            <div class="page-actions">
+              <button class="secondary-button button-with-icon" id="refresh-runtimes"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15.5 7A6 6 0 1 0 16 11"/><path d="M15.5 3v4h-4"/></svg>刷新</button>
+              <button class="primary-button button-with-icon" id="register-runtime"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12" /></svg>注册 Runtime</button>
+            </div>
+          </div>
+          <div class="metric-grid" id="runtime-metrics"></div>
+          <div class="resource-toolbar">
+            <div class="section-heading"><h2>已连接节点</h2><span class="count-badge" id="node-count">0</span></div>
+            <div class="toolbar-controls">
+              <label class="search-field"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><input type="search" id="runtime-search" name="runtime_search" aria-label="搜索节点或 Runtime" placeholder="搜索节点或 Runtime…" autocomplete="off" /></label>
+              <select id="node-filter" name="node_filter" aria-label="筛选节点状态"><option value="all">全部状态</option><option value="online">在线</option><option value="offline">离线</option></select>
+            </div>
+          </div>
+          <div class="connection-notice hidden" id="connection-notice" role="status"></div>
+          <div class="node-stack" id="nodes-grid"></div>
+          <p class="list-note">节点状态每 15 秒自动更新 · 新节点连接后会显示在这里</p>
+        </section>
+      </main>
+
+      <aside class="details-panel" id="details-panel" aria-hidden="true" inert>
+        <div class="details-header">
+          <div><span class="section-label">INSPECTOR</span><h2>运行详情</h2></div>
+          <button class="icon-button" id="close-details" aria-label="关闭运行详情">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+          </button>
+        </div>
+        <div class="details-content" id="details-content">
+          <div class="details-placeholder">发起一次对话后，这里会显示运行节点、事件和产物。</div>
+        </div>
+      </aside>
+    </div>
+
+    <dialog class="modal" id="agent-dialog">
+      <form method="dialog" class="modal-card" id="agent-form">
+        <div class="modal-header">
+          <div><span class="section-label">AGENT PROFILE</span><h2 id="agent-dialog-title">创建 Agent</h2></div>
+          <button class="icon-button" type="button" data-close-dialog="agent-dialog" aria-label="关闭">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+          </button>
+        </div>
+        <div class="form-grid">
+          <label>名称<input id="agent-name-input" name="name" autocomplete="off" required maxlength="48" placeholder="例如：代码搭档…" /></label>
+          <label>Runtime<select id="agent-provider-input" name="provider" required aria-describedby="agent-runtime-help"></select><span class="field-help" id="agent-runtime-help">选择自动调度，或固定到一台机器上的 Runtime 实例。</span></label>
+          <label>模型<select id="agent-model-input" name="model" aria-describedby="agent-model-help"></select><span class="field-help" id="agent-model-help">模型列表由已连接的 Runtime 自动提供。</span></label>
+          <label>工作区<select id="workspace-kind-input" name="workspace_kind"><option value="">不指定</option><option value="local">本地目录</option><option value="git">Git 仓库</option><option value="temp">临时目录</option></select></label>
+          <label class="full-width">工作方式<textarea id="agent-instructions-input" name="instructions" autocomplete="off" rows="5" placeholder="描述 Agent 的角色、原则和输出偏好…"></textarea></label>
+          <label class="full-width" id="workspace-source-label">路径 / 仓库地址<input id="workspace-source-input" name="workspace_source" autocomplete="off" spellcheck="false" placeholder="例如：/path/to/project…" /></label>
+        </div>
+        <div class="modal-actions">
+          <button class="danger-text hidden" type="button" id="delete-agent">删除</button>
+          <span class="action-spacer"></span>
+          <button class="secondary-button" type="button" data-close-dialog="agent-dialog">取消</button>
+          <button class="primary-button" type="submit" value="default">保存 Agent</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="modal narrow" id="agent-picker-dialog">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div><span class="section-label">AGENTS</span><h2>选择 Agent</h2></div>
+          <button class="icon-button" data-close-dialog="agent-picker-dialog" aria-label="关闭">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+          </button>
+        </div>
+        <div class="agent-picker-list" id="agent-picker-list"></div>
+        <button class="secondary-button full-button" id="create-agent-from-picker">+ 创建 Agent</button>
+      </div>
+    </dialog>
+
+    <dialog class="modal narrow" id="runtime-dialog">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div><span class="section-label">INFRASTRUCTURE</span><h2>Runtime</h2></div>
+          <button class="icon-button" data-close-dialog="runtime-dialog" aria-label="关闭">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+          </button>
+        </div>
+        <div class="runtime-list" id="runtime-list"></div>
+      </div>
+    </dialog>
+
+    <dialog class="modal" id="register-dialog">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div><span class="section-label">连接基础设施</span><h2>注册 Runtime</h2></div>
+          <button class="icon-button" data-close-dialog="register-dialog" aria-label="关闭"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg></button>
+        </div>
+        <div class="registration-note"><strong>让一台机器加入你的工作台</strong><p>在已安装 Codex 或 Trae 的机器上运行 Realy Node，即可注册 Runtime。</p></div>
+        <ol class="setup-steps"><li><span>1</span>填写节点信息</li><li><span>2</span>复制配置到目标机器</li><li><span>3</span>启动 Node</li></ol>
+        <div class="form-grid registration-form">
+          <label>Runtime<select id="register-provider" name="register_provider"><option value="trae">Trae</option><option value="codex">Codex</option></select></label>
+          <label>Node ID<input id="register-node-id" name="register_node_id" autocomplete="off" spellcheck="false" value="developer-macbook" /></label>
+          <label>命令<input id="register-command" name="register_command" autocomplete="off" spellcheck="false" value="traex" /></label>
+          <label>并发容量<input id="register-capacity" name="register_capacity" type="number" inputmode="numeric" min="1" max="64" value="2" /></label>
+          <label>默认模型<input id="register-default-model" name="register_default_model" autocomplete="off" spellcheck="false" placeholder="留空则使用 Runtime 默认值…" /></label>
+          <label>可选模型<input id="register-models" name="register_models" autocomplete="off" spellcheck="false" placeholder="model-a, model-b…" /><span class="field-help">用于创建 Agent 时的模型列表，以逗号分隔。</span></label>
+        </div>
+        <div class="code-preview"><div class="code-preview-head"><span>realy-node.json</span><button class="text-button" id="copy-runtime-config">复制配置</button></div><pre id="runtime-config-preview"></pre></div><p class="form-help">保存为 realy-node.json，设置 REALY_NODE_TOKEN 后运行 <code>realy-node -config realy-node.json</code>。跨机器连接时，将 server 改为目标机器可访问的地址；修改已有配置后重启 Node。</p>
+      </div>
+    </dialog>
+
+    <dialog class="modal narrow" id="auth-dialog">
+      <form class="modal-card" id="auth-form">
+        <div class="auth-mark">R</div>
+        <div class="auth-copy"><h2>连接 Realy</h2><p>输入 Host Token 以访问 Runtime。Token 只保存在安全 Cookie 中。</p></div>
+        <label>Host Token<input id="host-token" name="host_token" type="password" autocomplete="current-password" required placeholder="输入 token…" /></label>
+        <p class="form-error hidden" id="auth-error"></p>
+        <button class="primary-button full-button" type="submit">连接</button>
+      </form>
+    </dialog>
+
+    <dialog class="modal narrow" id="session-dialog">
+      <form class="modal-card" id="session-form">
+        <div class="modal-header">
+          <div><span class="section-label">CONVERSATION</span><h2>管理对话</h2></div>
+          <button class="icon-button" type="button" data-close-dialog="session-dialog" aria-label="关闭"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg></button>
+        </div>
+        <label>名称<input id="session-title-input" name="session_title" autocomplete="off" maxlength="60" required /></label>
+        <div class="modal-actions"><button class="danger-text" type="button" id="delete-session">删除对话</button><span class="action-spacer"></span><button class="secondary-button" type="button" data-close-dialog="session-dialog">取消</button><button class="primary-button" type="submit">保存名称</button></div>
+      </form>
+    </dialog>
+
+    <dialog class="modal narrow" id="confirm-dialog" aria-describedby="confirm-description">
+      <form method="dialog" class="modal-card">
+        <div class="modal-header"><h2 id="confirm-title">确认删除</h2></div>
+        <p class="form-help" id="confirm-description"></p>
+        <div class="modal-actions"><span class="action-spacer"></span><button class="secondary-button" value="cancel" autofocus>取消</button><button class="primary-button danger-button" value="delete">确认删除</button></div>
+      </form>
+    </dialog>
+    <div class="toast-region" id="toast-region" aria-live="polite"></div>
+    <script src="app.js" defer></script>
+  </body>
+</html>
