@@ -32,6 +32,7 @@ let openSelectControl = null;
 const renderedMessageIDs = new Set();
 const pendingMessageUpdates = new Map();
 let messageUpdateFrame = 0;
+let fallbackIDCounter = 0;
 const elements = {
   sidebar: $("#sidebar"),
   sidebarBackdrop: $("#sidebar-backdrop"),
@@ -86,8 +87,22 @@ function persist() {
   localStorage.setItem(STORAGE.selection, JSON.stringify(state.selection));
 }
 
+function randomID() {
+  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+  if (typeof globalThis.crypto?.getRandomValues === "function") {
+    const bytes = new Uint8Array(16);
+    globalThis.crypto.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"));
+    return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
+  }
+  fallbackIDCounter += 1;
+  return `${Date.now().toString(36)}-${fallbackIDCounter.toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
 function uid(prefix) {
-  return `${prefix}_${crypto.randomUUID()}`;
+  return `${prefix}_${randomID()}`;
 }
 
 function currentAgent() {
@@ -1011,7 +1026,7 @@ async function submitMessage(event) {
 
   const request = {
     agent_id: agent.id,
-    idempotency_key: crypto.randomUUID(),
+    idempotency_key: randomID(),
     session_id: session.id,
     runtime: { provider: agent.provider, ...(agent.runtimeID ? { id: agent.runtimeID } : {}), ...(agent.model ? { model: agent.model } : {}) },
     source: { kind: "playground.chat", external_id: session.id },
@@ -1216,29 +1231,34 @@ function fillModelOptions(selected = "") {
 
 function saveAgent(event) {
   event.preventDefault();
-  const name = $("#agent-name-input").value.trim();
-  const { provider, runtimeID } = selectedRuntimeTarget();
-  const model = elements.modelInput.value;
-  if (!name || !provider) return;
-  const workspaceKind = elements.workspaceKindInput.value;
-  const workspace = workspaceKind ? { kind: workspaceKind, ephemeral: workspaceKind === "temp" } : {};
-  if (["local", "git"].includes(workspaceKind)) workspace.source = elements.workspaceSourceInput.value.trim();
-  const value = { name, provider, runtimeID, model, instructions: $("#agent-instructions-input").value.trim(), workspace };
-  if (state.editingAgentID) {
-    const index = state.agents.findIndex((agent) => agent.id === state.editingAgentID);
-    state.agents[index] = { ...state.agents[index], ...value };
-  } else {
-    value.id = uid("agent");
-    value.createdAt = new Date().toISOString();
-    state.agents.push(value);
-    state.selection.agentID = value.id;
-    state.selection.sessionID = "";
+  try {
+    const name = $("#agent-name-input").value.trim();
+    const { provider, runtimeID } = selectedRuntimeTarget();
+    const model = elements.modelInput.value;
+    if (!name || !provider) return;
+    const workspaceKind = elements.workspaceKindInput.value;
+    const workspace = workspaceKind ? { kind: workspaceKind, ephemeral: workspaceKind === "temp" } : {};
+    if (["local", "git"].includes(workspaceKind)) workspace.source = elements.workspaceSourceInput.value.trim();
+    const value = { name, provider, runtimeID, model, instructions: $("#agent-instructions-input").value.trim(), workspace };
+    if (state.editingAgentID) {
+      const index = state.agents.findIndex((agent) => agent.id === state.editingAgentID);
+      state.agents[index] = { ...state.agents[index], ...value };
+    } else {
+      value.id = uid("agent");
+      value.createdAt = new Date().toISOString();
+      state.agents.push(value);
+      state.selection.agentID = value.id;
+      state.selection.sessionID = "";
+    }
+    persist();
+    closeDialog(elements.agentDialog);
+    render();
+    toast(state.editingAgentID ? "Agent 已更新" : "Agent 已创建");
+    elements.prompt.focus();
+  } catch (error) {
+    console.error("save agent failed", error);
+    toast(`保存 Agent 失败：${error?.message || "未知错误"}`);
   }
-  persist();
-  closeDialog(elements.agentDialog);
-  render();
-  toast(state.editingAgentID ? "Agent 已更新" : "Agent 已创建");
-  elements.prompt.focus();
 }
 
 async function deleteAgent() {
