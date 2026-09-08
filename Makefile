@@ -11,6 +11,7 @@ vet:
 
 installer-check:
 	sh -n ./install.sh
+	sh ./scripts/test-install-service.sh
 
 verify: fmt vet test installer-check
 

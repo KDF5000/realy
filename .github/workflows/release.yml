@@ -18,7 +18,7 @@ jobs:
           go-version-file: go.mod
           cache: true
       - run: go test ./...
-      - run: sh -n ./install.sh
+      - run: make installer-check
 
   build:
     needs: test

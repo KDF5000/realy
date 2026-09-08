@@ -13,6 +13,7 @@ capacity="${REALY_NODE_CAPACITY:-2}"
 node_token="${REALY_NODE_TOKEN:-}"
 runtime_choice="${REALY_RUNTIME:-auto}"
 force_config=0
+install_service="${REALY_INSTALL_SERVICE:-0}"
 
 usage() {
   cat <<'EOF'
@@ -31,6 +32,7 @@ Options:
   --install-dir DIR  Binary directory (default: ~/.local/bin)
   --config FILE      Configuration path (default: ~/.config/realy/node.json)
   --force            Replace an existing config after creating a backup
+  --install-service  Install and start a systemd user service or macOS LaunchAgent
   -h, --help         Show this help
 
 Environment variables with the REALY_ prefix provide the same defaults.
@@ -57,10 +59,17 @@ while [ "$#" -gt 0 ]; do
     --install-dir) need_value "$@"; install_dir=$2; shift 2 ;;
     --config) need_value "$@"; config_file=$2; shift 2 ;;
     --force) force_config=1; shift ;;
+    --install-service|--daemon) install_service=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) fail "unknown option: $1" ;;
   esac
 done
+
+case "$install_service" in
+  1|true|yes) install_service=1 ;;
+  0|false|no) install_service=0 ;;
+  *) fail "REALY_INSTALL_SERVICE must be 0, 1, true, false, yes, or no" ;;
+esac
 
 case "$capacity" in
   ''|*[!0-9]*) fail "--capacity must be a positive integer" ;;
@@ -153,6 +162,131 @@ json_escape() {
   printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
+systemd_escape() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/%/%%/g'
+}
+
+xml_escape() {
+  printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g; s/'"'"'/\&apos;/g'
+}
+
+install_systemd_service() {
+  command -v systemctl >/dev/null 2>&1 || fail "systemctl is required to install the Linux service"
+  service_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user"
+  service_file="$service_dir/realy-node.service"
+  escaped_home=$(systemd_escape "$HOME")
+  escaped_path=$(systemd_escape "$PATH")
+  escaped_binary=$(systemd_escape "$install_dir/realy-node")
+  escaped_config=$(systemd_escape "$config_file")
+  escaped_service_token=$(systemd_escape "$node_token")
+  token_environment=""
+  [ -z "$node_token" ] || token_environment="Environment=\"REALY_NODE_TOKEN=${escaped_service_token}\""
+
+  mkdir -p "$service_dir"
+  umask 077
+  cat >"$service_file" <<EOF
+[Unit]
+Description=Realy Agent Runtime Node
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment="HOME=${escaped_home}"
+Environment="PATH=${escaped_path}"
+${token_environment}
+ExecStart="${escaped_binary}" -config "${escaped_config}"
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=45s
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+
+[Install]
+WantedBy=default.target
+EOF
+  chmod 600 "$service_file"
+  systemctl --user daemon-reload || fail "systemd user manager is unavailable; log in as the target user and try again"
+  systemctl --user enable --now realy-node.service || fail "could not enable and start realy-node.service"
+  printf 'Installed and started systemd user service: %s\n' "$service_file"
+  printf 'For startup without an interactive login, run: sudo loginctl enable-linger %s\n' "$(id -un)"
+}
+
+install_launchd_service() {
+  command -v launchctl >/dev/null 2>&1 || fail "launchctl is required to install the macOS service"
+  service_dir="$HOME/Library/LaunchAgents"
+  log_dir="$data_dir/logs"
+  service_file="$service_dir/dev.realy.node.plist"
+  escaped_home=$(xml_escape "$HOME")
+  escaped_path=$(xml_escape "$PATH")
+  escaped_binary=$(xml_escape "$install_dir/realy-node")
+  escaped_config=$(xml_escape "$config_file")
+  escaped_stdout=$(xml_escape "$log_dir/node.log")
+  escaped_stderr=$(xml_escape "$log_dir/node.error.log")
+  escaped_service_token=$(xml_escape "$node_token")
+  token_environment=""
+  if [ -n "$node_token" ]; then
+    token_environment="
+      <key>REALY_NODE_TOKEN</key>
+      <string>${escaped_service_token}</string>"
+  fi
+
+  mkdir -p "$service_dir" "$log_dir"
+  umask 077
+  cat >"$service_file" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>dev.realy.node</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${escaped_binary}</string>
+    <string>-config</string>
+    <string>${escaped_config}</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>
+    <string>${escaped_home}</string>
+    <key>PATH</key>
+    <string>${escaped_path}</string>${token_environment}
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>5</integer>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>StandardOutPath</key>
+  <string>${escaped_stdout}</string>
+  <key>StandardErrorPath</key>
+  <string>${escaped_stderr}</string>
+</dict>
+</plist>
+EOF
+  chmod 600 "$service_file"
+  launch_domain="gui/$(id -u)"
+  launchctl bootout "$launch_domain/dev.realy.node" >/dev/null 2>&1 || true
+  if ! launchctl bootstrap "$launch_domain" "$service_file"; then
+    launchctl load -w "$service_file" || fail "could not load dev.realy.node"
+  fi
+  launchctl enable "$launch_domain/dev.realy.node" >/dev/null 2>&1 || true
+  launchctl kickstart -k "$launch_domain/dev.realy.node" >/dev/null 2>&1 || true
+  printf 'Installed and started macOS LaunchAgent: %s\n' "$service_file"
+}
+
+install_node_service() {
+  case "$target_os" in
+    linux) install_systemd_service ;;
+    darwin) install_launchd_service ;;
+  esac
+}
+
 if [ -f "$config_file" ] && [ "$force_config" -ne 1 ]; then
   printf 'Keeping existing config: %s\n' "$config_file"
 else
@@ -209,4 +343,9 @@ case ":$PATH:" in
   *":$install_dir:"*) ;;
   *) printf 'Add %s to PATH before using the installed commands.\n' "$install_dir" ;;
 esac
-printf 'Start the node with:\n  %s/realy-node -config %s\n' "$install_dir" "$config_file"
+if [ "$install_service" -eq 1 ]; then
+  install_node_service
+else
+  printf 'Start the node with:\n  %s/realy-node -config %s\n' "$install_dir" "$config_file"
+  printf 'Or install it as a background service by running this installer with --install-service.\n'
+fi

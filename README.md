@@ -22,7 +22,7 @@ Realy Server：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/KDF5000/realy/main/install.sh \
-  | sh -s -- --server https://realy.example.com
+  | sh -s -- --server https://realy.example.com --install-service
 ```
 
 脚本支持 Intel/Apple Silicon 和 Linux amd64/arm64，下载后会验证 SHA-256，并安装
@@ -34,16 +34,24 @@ curl -fsSL https://raw.githubusercontent.com/KDF5000/realy/main/install.sh \
 ~/.local/bin/realy-node -config ~/.config/realy/node.json
 ```
 
+推荐传入 `--install-service`：Linux 会安装并启动用户级 systemd service，macOS 会安装并
+启动 LaunchAgent。Node 仍以前台进程方式运行，由操作系统负责开机启动、异常重启、日志和
+退出信号。Linux 查看日志使用 `journalctl --user -u realy-node -f`，管理服务使用
+`systemctl --user status|restart|stop realy-node`；如需用户未登录时也随系统启动，再执行
+`sudo loginctl enable-linger "$USER"`。macOS 日志位于 `~/.cache/realy/logs/`，服务可用
+`launchctl print gui/$(id -u)/dev.realy.node` 查看。
+
 启用 Node Token 时建议通过环境变量传递，避免 Token 出现在 Shell 历史中：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/KDF5000/realy/main/install.sh \
-  | REALY_NODE_TOKEN=node-secret sh -s -- --server https://realy.example.com
+  | REALY_NODE_TOKEN=node-secret sh -s -- --server https://realy.example.com --install-service
 ```
 
 可以使用 `--node-id`、`--capacity`、`--runtime auto|codex|trae|both`、`--version`、
-`--install-dir` 和 `--config` 自定义安装。重复安装默认保留现有配置；传入 `--force` 时会先
-创建带时间戳的备份再生成新配置。
+`--install-dir`、`--config` 和 `--install-service` 自定义安装。重复安装默认保留现有配置；
+传入 `--force` 时会先创建带时间戳的备份再生成新配置。服务会保存安装时的 PATH，确保由
+npm、nvm 等方式安装的 Runtime CLI 在非交互登录环境中仍可发现 Node.js。
 
 推送 `v*` Tag 后，[Release workflow](.github/workflows/release.yml) 会运行测试并发布四个平台
 压缩包及 `checksums.txt`：
@@ -90,7 +98,7 @@ Agent 机器不需要运行 Server 容器。在对应机器安装 Node，并把�
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/KDF5000/realy/main/install.sh \
-  | REALY_NODE_TOKEN='your-node-token' sh -s -- --server https://realy.example.com
+  | REALY_NODE_TOKEN='your-node-token' sh -s -- --server https://realy.example.com --install-service
 ```
 
 生产环境建议在 `8787` 前配置带 TLS 的反向代理，仅开放 Realy Server 端口；Compose 中的
