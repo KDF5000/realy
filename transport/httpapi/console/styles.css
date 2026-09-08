@@ -135,19 +135,17 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .markdown-table tbody tr:nth-child(even) { background: #fbfcfa; }
 .markdown-table code { white-space: nowrap; }
 .chat-end-anchor { width: 100%; height: 1px; scroll-margin-bottom: 1px; }
-.message-actions { display: flex; gap: 5px; margin: 8px 0 0 27px; opacity: 0; transition: opacity .16s; }
-.message:hover .message-actions, .message:focus-within .message-actions { opacity: 1; }
-.message-action { min-height: 28px; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; }
+.message-actions { display: flex; align-items: center; gap: 2px; margin: 8px 0 0 27px; }
+.message-action { width: 30px; height: 30px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; transition: color .14s, background-color .14s; }
 .message-action:hover { background: var(--surface-soft); color: var(--ink); }
+.message-action:focus-visible { outline: 2px solid #71937a; outline-offset: 1px; }
+.message-action svg { width: 16px; height: 16px; stroke-width: 1.75; }
 .activity-line { display: flex; align-items: center; gap: 7px; margin-top: 9px; color: var(--faint); font-size: 12px; }
 .activity-line .status-dot { width: 6px; height: 6px; animation: pulse 1.2s infinite; }
 .thinking { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); }
 .thinking i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; animation: pulse 1.1s infinite ease-in-out; }
 .thinking i:nth-child(2) { animation-delay: .14s; }.thinking i:nth-child(3) { animation-delay: .28s; }
 .message-error { color: var(--red); }
-.artifact-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-.artifact-link { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 9px; font-size: 12px; text-decoration: none; }
-.artifact-link:hover { border-color: #c5c7bf; }
 
 .composer-wrap { width: min(820px, calc(100% - 32px)); margin: 0 auto; padding: 12px 0 14px; background: white; }
 .composer { border: 1px solid #dce1d7; border-radius: 16px; padding: 18px 14px 12px 18px; background: white; box-shadow: 0 4px 20px #18251908, 0 1px 3px #18251906; transition: border-color .16s, box-shadow .16s; }

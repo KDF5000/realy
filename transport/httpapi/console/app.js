@@ -483,13 +483,102 @@ function createMessageNode(message) {
   if (message.role === "assistant" && message.status !== "pending") {
     const actions = document.createElement("div");
     actions.className = "message-actions";
-    const copy = document.createElement("button"); copy.className = "message-action"; copy.textContent = "复制";
-    copy.addEventListener("click", async () => { await navigator.clipboard.writeText(message.content || ""); toast("回复已复制"); });
-    const retry = document.createElement("button"); retry.className = "message-action"; retry.textContent = "重新运行"; retry.disabled = state.busy;
+    const copy = messageAction("copy", "复制回复");
+    copy.addEventListener("click", async () => {
+      try {
+        await copyText(message.content || "");
+        copy.replaceChildren(icon("check"));
+        copy.setAttribute("aria-label", "已复制");
+        copy.title = "已复制";
+        toast("回复已复制");
+        window.setTimeout(() => {
+          copy.replaceChildren(icon("copy"));
+          copy.setAttribute("aria-label", "复制回复");
+          copy.title = "复制回复";
+        }, 1600);
+      } catch {
+        toast("复制失败，请手动选择回复内容。");
+      }
+    });
+    const retry = messageAction("retry", "重新运行"); retry.disabled = state.busy;
     retry.addEventListener("click", () => retryMessage(message));
-    actions.append(copy, retry); article.append(actions);
+    const downloadLabel = message.artifacts?.length ? `下载${message.artifacts.length > 1 ? ` ${message.artifacts.length} 个产物` : ` ${message.artifacts[0].name || "产物"}`}` : "下载回复";
+    const download = messageAction("download", downloadLabel);
+    download.addEventListener("click", async () => {
+      download.disabled = true;
+      try {
+        await downloadMessage(message);
+      } catch (error) {
+        toast(`下载失败：${error.message}`);
+      } finally {
+        download.disabled = false;
+      }
+    });
+    actions.append(copy, retry, download); article.append(actions);
   }
   return article;
+}
+
+function messageAction(iconName, label) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "message-action";
+  button.setAttribute("aria-label", label);
+  button.title = label;
+  button.append(icon(iconName));
+  return button;
+}
+
+async function copyText(value) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return;
+    } catch { /* fall back for non-secure or denied clipboard access */ }
+  }
+  const input = document.createElement("textarea");
+  input.value = value;
+  input.setAttribute("readonly", "");
+  input.style.position = "fixed";
+  input.style.opacity = "0";
+  document.body.append(input);
+  input.select();
+  const copied = document.execCommand("copy");
+  input.remove();
+  if (!copied) throw new Error("clipboard unavailable");
+}
+
+async function downloadMessage(message) {
+  if (!message.artifacts?.length) {
+    saveBlob(new Blob([message.content || ""], { type: "text/markdown;charset=utf-8" }), "agent-response.md");
+    toast("回复文件已下载");
+    return;
+  }
+  for (const artifact of message.artifacts) {
+    const response = await fetch(`/v1/artifacts/${encodeURIComponent(artifact.id)}`, { credentials: "same-origin" });
+    if (response.status === 401) {
+      showAuth();
+      throw new Error("需要 Host Token");
+    }
+    if (!response.ok) throw new Error(`请求失败 (${response.status})`);
+    saveBlob(await response.blob(), safeFileName(artifact.name || artifact.type || "artifact"));
+  }
+  toast(message.artifacts.length > 1 ? `${message.artifacts.length} 个产物已下载` : "产物已下载");
+}
+
+function saveBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function safeFileName(value) {
+  return String(value).replace(/[\\/:*?"<>|\u0000-\u001f]/g, "-").trim() || "artifact";
 }
 
 function populateMessageBody(body, message, streamingPlainText = false) {
@@ -512,18 +601,6 @@ function populateMessageBody(body, message, streamingPlainText = false) {
   } else {
     renderRichText(body, message.content || (message.status === "cancelled" ? "本次执行已取消。" : "没有返回文本结果。"));
     if (message.status === "failed") body.classList.add("message-error");
-  }
-  if (message.artifacts?.length) {
-    const artifacts = document.createElement("div");
-    artifacts.className = "artifact-list";
-    for (const artifact of message.artifacts) {
-      const link = document.createElement("a");
-      link.className = "artifact-link";
-      link.href = `/v1/artifacts/${encodeURIComponent(artifact.id)}`;
-      link.textContent = `↗ ${artifact.name || artifact.type || "产物"}`;
-      artifacts.append(link);
-    }
-    body.append(artifacts);
   }
 }
 
@@ -852,6 +929,10 @@ const ICONS = {
   capacity: '<path d="M4 19V9m8 10V4m8 15v-7"/>',
   search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/>',
   trae: '<path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5"/>',
+  copy: '<rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+  check: '<path d="m5 12 4 4L19 6"/>',
+  retry: '<path d="M20 11a8 8 0 1 0-2.34 5.66M20 4v7h-7"/>',
+  download: '<path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14"/>',
 };
 function icon(name) {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
