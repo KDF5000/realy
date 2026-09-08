@@ -126,6 +126,14 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .message-body code:not(pre code) { padding: 2px 5px; border-radius: 5px; background: var(--surface-soft); font: .88em ui-monospace, SFMono-Regular, Menlo, monospace; }
 .message-body ul, .message-body ol { margin: 8px 0; padding-left: 22px; }.message-body li { margin: 5px 0; }
 .message-body h3, .message-body h4, .message-body h5 { margin: 18px 0 8px; line-height: 1.3; }.message-body a { color: #286f53; text-underline-offset: 3px; }
+.markdown-table-wrap { width: 100%; max-width: 100%; margin: 12px 0 16px; overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: white; scrollbar-width: thin; }
+.markdown-table { width: 100%; min-width: 520px; border-collapse: collapse; white-space: normal; font-size: 13px; line-height: 1.55; }
+.markdown-table th, .markdown-table td { padding: 10px 12px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); vertical-align: top; }
+.markdown-table th:last-child, .markdown-table td:last-child { border-right: 0; }
+.markdown-table tbody tr:last-child td { border-bottom: 0; }
+.markdown-table th { background: #f6f8f4; color: #4f584d; font-size: 12px; font-weight: 650; }
+.markdown-table tbody tr:nth-child(even) { background: #fbfcfa; }
+.markdown-table code { white-space: nowrap; }
 .chat-end-anchor { width: 100%; height: 1px; scroll-margin-bottom: 1px; }
 .message-actions { display: flex; gap: 5px; margin: 8px 0 0 27px; opacity: 0; transition: opacity .16s; }
 .message:hover .message-actions, .message:focus-within .message-actions { opacity: 1; }

@@ -558,6 +558,10 @@ function renderRichText(container, content) {
       const lines = paragraph.split("\n");
       const unordered = lines.every((line) => /^\s*[-*]\s+/.test(line));
       const ordered = lines.every((line) => /^\s*\d+\.\s+/.test(line));
+      const table = parseTable(lines);
+      if (table) {
+        container.append(table); continue;
+      }
       if (unordered || ordered) {
         const list = document.createElement(ordered ? "ol" : "ul");
         for (const line of lines) {
@@ -575,6 +579,86 @@ function renderRichText(container, content) {
       const node = document.createElement("p"); appendInline(node, paragraph); container.append(node);
     }
   });
+}
+
+function parseTable(lines) {
+  if (lines.length < 2) return null;
+  const header = splitTableRow(lines[0]);
+  const separators = splitTableRow(lines[1]);
+  if (!header || !separators || header.length !== separators.length) return null;
+  if (!separators.every((cell) => /^:?-{3,}:?$/.test(cell.replace(/\s/g, "")))) return null;
+  const rows = [];
+  for (const line of lines.slice(2)) {
+    const cells = splitTableRow(line);
+    if (!cells) return null;
+    rows.push(cells);
+  }
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "markdown-table-wrap";
+  const table = document.createElement("table");
+  table.className = "markdown-table";
+  const head = document.createElement("thead");
+  const headerRow = document.createElement("tr");
+  const alignments = separators.map((separator) => {
+    const value = separator.replace(/\s/g, "");
+    if (value.startsWith(":") && value.endsWith(":")) return "center";
+    if (value.endsWith(":")) return "right";
+    return "left";
+  });
+  header.forEach((value, index) => {
+    const cell = document.createElement("th");
+    cell.scope = "col";
+    cell.style.textAlign = alignments[index];
+    appendInline(cell, value);
+    headerRow.append(cell);
+  });
+  head.append(headerRow);
+  table.append(head);
+
+  if (rows.length) {
+    const body = document.createElement("tbody");
+    for (const values of rows) {
+      const row = document.createElement("tr");
+      for (let index = 0; index < header.length; index += 1) {
+        const cell = document.createElement("td");
+        cell.style.textAlign = alignments[index];
+        appendInline(cell, values[index] || "");
+        row.append(cell);
+      }
+      body.append(row);
+    }
+    table.append(body);
+  }
+  wrapper.append(table);
+  return wrapper;
+}
+
+function splitTableRow(line) {
+  const value = line.trim();
+  if (!value.includes("|")) return null;
+  const cells = [];
+  let cell = "";
+  let inCode = false;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === "\\" && value[index + 1] === "|") {
+      cell += "|";
+      index += 1;
+    } else if (character === "`") {
+      inCode = !inCode;
+      cell += character;
+    } else if (character === "|" && !inCode) {
+      cells.push(cell.trim());
+      cell = "";
+    } else {
+      cell += character;
+    }
+  }
+  cells.push(cell.trim());
+  if (value.startsWith("|") && cells[0] === "") cells.shift();
+  if (cells[cells.length - 1] === "") cells.pop();
+  return cells.length >= 2 ? cells : null;
 }
 
 function appendInline(container, text) {
