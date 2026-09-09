@@ -28,7 +28,7 @@ Options:
   --capacity N       Maximum concurrent runs (default: 2)
   --runtime VALUE    auto, codex, trae, or both (default: auto)
   --token TOKEN      Node authentication token
-  --version VERSION  Release tag such as v0.1.0 (default: latest)
+  --version VERSION  Release tag such as v0.2.0 (default: latest)
   --install-dir DIR  Binary directory (default: ~/.local/bin)
   --config FILE      Configuration path (default: ~/.config/relay/node.json)
   --force            Replace an existing config after creating a backup
