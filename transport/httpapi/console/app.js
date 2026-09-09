@@ -1305,11 +1305,12 @@ function activityLabel(event) {
 async function completeRun(runID, assistantMessage, session) {
   try {
     const run = await api(`/v1/runs/${encodeURIComponent(runID)}`);
-    const artifacts = await api(`/v1/runs/${encodeURIComponent(runID)}/artifacts`).catch(() => []);
+    const artifactResponse = await api(`/v1/runs/${encodeURIComponent(runID)}/artifacts`).catch(() => []);
+    const artifacts = Array.isArray(artifactResponse) ? artifactResponse : [];
     state.currentRun = run;
     if (run.status !== "succeeded") {
       const events = await api(`/v1/runs/${encodeURIComponent(runID)}/events`).catch(() => null);
-      if (events) {
+      if (Array.isArray(events)) {
         let partial = "";
         for (const event of events) {
           if (run.attempt?.id && event.attempt_id !== run.attempt.id) continue;
@@ -1330,7 +1331,7 @@ function finishAssistant(message, session, status, content, artifacts = []) {
   message.status = status;
   message.error = status === "succeeded" ? "" : content;
   if (status === "succeeded") message.content = content;
-  message.artifacts = artifacts.filter((artifact) => !artifact.type?.includes("instruction"));
+  message.artifacts = (Array.isArray(artifacts) ? artifacts : []).filter((artifact) => !artifact.type?.includes("instruction"));
   session.updatedAt = new Date().toISOString();
   state.busy = false;
   state.cancelRequested = false;
@@ -1560,7 +1561,8 @@ async function restoreActiveRun() {
       if (["succeeded", "failed", "cancelled"].includes(run.status)) {
         await completeRun(run.id, assistant, session);
       } else {
-        state.events = await api(`/v1/runs/${encodeURIComponent(run.id)}/events`);
+        const events = await api(`/v1/runs/${encodeURIComponent(run.id)}/events`);
+        state.events = Array.isArray(events) ? events : [];
         assistant.content = state.events.filter((event) => event.type === "assistant.message.delta").map((event) => event.data?.delta || "").join("");
         assistant.status = assistant.content ? "streaming" : "pending";
         state.busy = true; watchRun(run.id, assistant, session); render();

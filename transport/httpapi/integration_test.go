@@ -67,6 +67,44 @@ func TestConsoleAssetsAndHostSession(t *testing.T) {
 	}
 }
 
+func TestListEndpointsEncodeEmptyArrays(t *testing.T) {
+	service := controlplane.New(time.Minute)
+	server := httptest.NewServer(httpapi.NewHandler(service))
+	defer server.Close()
+
+	run, err := httpapi.NewClient(server.URL).Submit(context.Background(), relay.Request{
+		AgentID:        "agent",
+		IdempotencyKey: "empty-lists",
+		Runtime:        relay.RuntimeRequirement{Provider: "mock"},
+		Input:          relay.Input{Prompt: "work"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := []string{
+		"/v1/nodes",
+		"/v1/sessions/missing/runs",
+		"/v1/runs/" + run.ID + "/artifacts",
+		"/v1/runs/" + run.ID + "/interactions",
+	}
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			response, err := http.Get(server.URL + path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			body, err := io.ReadAll(response.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if response.StatusCode != http.StatusOK || string(bytes.TrimSpace(body)) != "[]" {
+				t.Fatalf("GET %s: status=%d body=%q, want 200 []", path, response.StatusCode, body)
+			}
+		})
+	}
+}
+
 func TestAuthenticatedIsolationArtifactsAndInteractions(t *testing.T) {
 	service := controlplane.New(time.Minute)
 	auth := httpapi.StaticTokens{{Value: "host-a", Scope: controlplane.AccessScope{Kind: controlplane.AccessHost, TenantID: "tenant-a", ProjectID: "project"}}, {Value: "host-b", Scope: controlplane.AccessScope{Kind: controlplane.AccessHost, TenantID: "tenant-b", ProjectID: "project"}}, {Value: "node", Scope: controlplane.AccessScope{Kind: controlplane.AccessNode, Subject: "node-a"}}}

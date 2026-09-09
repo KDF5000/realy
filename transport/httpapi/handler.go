@@ -94,20 +94,20 @@ func (h *Handler) consoleSession(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) listRuns(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	value, err := h.service.ListRuns(r.Context(), limit)
-	respond(w, http.StatusOK, value, err)
+	respondList(w, http.StatusOK, value, err)
 }
 func (h *Handler) sessionRuns(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	value, err := h.service.SessionRuns(r.Context(), r.PathValue("sessionID"), limit)
-	respond(w, http.StatusOK, value, err)
+	respondList(w, http.StatusOK, value, err)
 }
 func (h *Handler) attempts(w http.ResponseWriter, r *http.Request) {
 	value, err := h.service.Attempts(r.Context(), r.PathValue("runID"))
-	respond(w, http.StatusOK, value, err)
+	respondList(w, http.StatusOK, value, err)
 }
 func (h *Handler) interactions(w http.ResponseWriter, r *http.Request) {
 	value, err := h.service.Interactions(r.Context(), r.PathValue("runID"))
-	respond(w, http.StatusOK, value, err)
+	respondList(w, http.StatusOK, value, err)
 }
 func (h *Handler) resolveInteraction(w http.ResponseWriter, r *http.Request) {
 	var value struct {
@@ -143,7 +143,7 @@ func (h *Handler) getInteraction(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) { h.handler.ServeHTTP(w, r) }
 func (h *Handler) artifacts(w http.ResponseWriter, r *http.Request) {
 	value, err := h.service.Artifacts(r.Context(), r.PathValue("runID"))
-	respond(w, http.StatusOK, value, err)
+	respondList(w, http.StatusOK, value, err)
 }
 func (h *Handler) downloadArtifact(w http.ResponseWriter, r *http.Request) {
 	metadata, reader, err := h.service.OpenArtifact(r.Context(), r.PathValue("artifactID"))
@@ -175,7 +175,7 @@ func (h *Handler) getRun(w http.ResponseWriter, r *http.Request) {
 }
 func (h *Handler) events(w http.ResponseWriter, r *http.Request) {
 	value, err := h.service.Events(r.Context(), r.PathValue("runID"))
-	respond(w, http.StatusOK, value, err)
+	respondList(w, http.StatusOK, value, err)
 }
 func (h *Handler) streamEvents(w http.ResponseWriter, r *http.Request) {
 	afterValue := r.URL.Query().Get("after")
@@ -272,7 +272,7 @@ func (h *Handler) cancelRun(w http.ResponseWriter, r *http.Request) {
 }
 func (h *Handler) nodes(w http.ResponseWriter, r *http.Request) {
 	value, err := h.service.Nodes(r.Context())
-	respond(w, http.StatusOK, value, err)
+	respondList(w, http.StatusOK, value, err)
 }
 func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 	var value controlplane.NodeRegistration
@@ -434,6 +434,12 @@ func respond(w http.ResponseWriter, status int, value any, err error) {
 		return
 	}
 	writeJSON(w, status, value)
+}
+func respondList[T any](w http.ResponseWriter, status int, value []T, err error) {
+	if value == nil {
+		value = []T{}
+	}
+	respond(w, status, value, err)
 }
 func respondEmpty(w http.ResponseWriter, err error) {
 	if err != nil {
