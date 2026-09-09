@@ -74,6 +74,8 @@ run_installer() {
   mkdir -p "$home_dir"
   : >"$service_log"
   HOME="$home_dir" \
+    XDG_CONFIG_HOME="$home_dir/.config" \
+    XDG_CACHE_HOME="$home_dir/.cache" \
     PATH="$fake_bin:$PATH" \
     FAKE_OS="$os_name" \
     FAKE_RELEASE_DIR="$release_dir" \
