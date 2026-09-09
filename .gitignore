@@ -1,7 +1,7 @@
 /bin/
-/.realy/
+/.relay/
 .DS_Store
 bin/
 artifact-output
-realy-node.json
+relay-node.json
 .env

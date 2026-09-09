@@ -1,4 +1,4 @@
-package realy
+package relay
 
 import (
 	"context"
@@ -26,7 +26,7 @@ type Engine struct {
 
 func New(options Options) (*Engine, error) {
 	if options.Executor == nil {
-		return nil, errors.New("realy: executor is required")
+		return nil, errors.New("relay: executor is required")
 	}
 	if options.Store == nil {
 		options.Store = NewMemoryStore()
@@ -145,7 +145,7 @@ func (e *Engine) emit(ctx context.Context, run Run, eventType string, value any)
 
 func validateRequest(request Request) error {
 	if request.AgentID == "" || request.IdempotencyKey == "" || request.Input.Prompt == "" {
-		return errors.New("realy: agent ID, idempotency key, and input prompt are required")
+		return errors.New("relay: agent ID, idempotency key, and input prompt are required")
 	}
 	return nil
 }

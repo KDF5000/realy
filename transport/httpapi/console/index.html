@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
     <meta name="theme-color" content="#f8f8f7" />
-    <title>Runtimes · Realy</title>
+    <title>Runtimes · Relay</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -14,9 +14,9 @@
     <div class="app-shell">
       <aside class="sidebar" id="sidebar">
         <div class="brand-row">
-          <a class="brand" href="/console/" aria-label="Realy Playground">
+          <a class="brand" href="/console/" aria-label="Relay Playground">
             <span class="brand-mark" aria-hidden="true">R</span>
-            <span translate="no">realy<span class="brand-caption">Agent workspace</span></span>
+            <span translate="no">relay<span class="brand-caption">Agent workspace</span></span>
           </a>
           <button class="icon-button mobile-only" id="close-sidebar" aria-label="关闭侧栏">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
@@ -229,7 +229,7 @@
           <div><span class="section-label">连接基础设施</span><h2>注册 Runtime</h2></div>
           <button class="icon-button" data-close-dialog="register-dialog" aria-label="关闭"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg></button>
         </div>
-        <div class="registration-note"><strong>让一台机器加入你的工作台</strong><p>在已安装 Codex 或 Trae 的机器上运行 Realy Node，即可注册 Runtime。</p></div>
+        <div class="registration-note"><strong>让一台机器加入你的工作台</strong><p>在已安装 Codex 或 Trae 的机器上运行 Relay Node，即可注册 Runtime。</p></div>
         <ol class="setup-steps"><li><span>1</span>填写节点信息</li><li><span>2</span>复制配置到目标机器</li><li><span>3</span>启动 Node</li></ol>
         <div class="form-grid registration-form">
           <label>Runtime<select id="register-provider" name="register_provider"><option value="trae">Trae</option><option value="codex">Codex</option></select></label>
@@ -239,14 +239,14 @@
           <label>默认模型<input id="register-default-model" name="register_default_model" autocomplete="off" spellcheck="false" placeholder="留空则使用 Runtime 默认值…" /></label>
           <label>可选模型<input id="register-models" name="register_models" autocomplete="off" spellcheck="false" placeholder="model-a, model-b…" /><span class="field-help">用于创建 Agent 时的模型列表，以逗号分隔。</span></label>
         </div>
-        <div class="code-preview"><div class="code-preview-head"><span>realy-node.json</span><button class="text-button" id="copy-runtime-config">复制配置</button></div><pre id="runtime-config-preview"></pre></div><p class="form-help">保存为 realy-node.json，设置 REALY_NODE_TOKEN 后运行 <code>realy-node -config realy-node.json</code>。跨机器连接时，将 server 改为目标机器可访问的地址；修改已有配置后重启 Node。</p>
+        <div class="code-preview"><div class="code-preview-head"><span>relay-node.json</span><button class="text-button" id="copy-runtime-config">复制配置</button></div><pre id="runtime-config-preview"></pre></div><p class="form-help">保存为 relay-node.json，设置 RELAY_NODE_TOKEN 后运行 <code>relay-node -config relay-node.json</code>。跨机器连接时，将 server 改为目标机器可访问的地址；修改已有配置后重启 Node。</p>
       </div>
     </dialog>
 
     <dialog class="modal narrow" id="auth-dialog">
       <form class="modal-card" id="auth-form">
         <div class="auth-mark">R</div>
-        <div class="auth-copy"><h2>连接 Realy</h2><p>输入 Host Token 以访问 Runtime。Token 只保存在安全 Cookie 中。</p></div>
+        <div class="auth-copy"><h2>连接 Relay</h2><p>输入 Host Token 以访问 Runtime。Token 只保存在安全 Cookie 中。</p></div>
         <label>Host Token<input id="host-token" name="host_token" type="password" autocomplete="current-password" required placeholder="输入 token…" /></label>
         <p class="form-error hidden" id="auth-error"></p>
         <button class="primary-button full-button" type="submit">连接</button>

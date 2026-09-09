@@ -12,24 +12,24 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/KDF5000/realy"
-	"github.com/KDF5000/realy/binding"
-	"github.com/KDF5000/realy/controlplane"
-	"github.com/KDF5000/realy/node"
-	"github.com/KDF5000/realy/sdk"
-	"github.com/KDF5000/realy/transport/httpapi"
+	"github.com/KDF5000/relay"
+	"github.com/KDF5000/relay/binding"
+	"github.com/KDF5000/relay/controlplane"
+	"github.com/KDF5000/relay/node"
+	"github.com/KDF5000/relay/sdk"
+	"github.com/KDF5000/relay/transport/httpapi"
 )
 
 func main() {
 	ctx := context.Background()
-	workRoot, err := os.MkdirTemp("", "realy-fleet-demo-")
+	workRoot, err := os.MkdirTemp("", "relay-fleet-demo-")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// This is Multica's business API. Realy only sees a capability envelope.
+	// This is Multica's business API. Relay only sees a capability envelope.
 	multicaAPI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var request realy.CapabilityRequest
+		var request relay.CapabilityRequest
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -90,8 +90,8 @@ func main() {
 	}
 
 	output := struct {
-		Run      realy.Run           `json:"run"`
-		Events   []realy.Event       `json:"events"`
+		Run      relay.Run           `json:"run"`
+		Events   []relay.Event       `json:"events"`
 		Nodes    []controlplane.Node `json:"nodes"`
 		WorkRoot string              `json:"work_root"`
 	}{completed, events, nodes, workRoot}
@@ -101,28 +101,28 @@ func main() {
 
 type demoExecutor struct{ workRoot string }
 
-func (e demoExecutor) Execute(ctx context.Context, execution realy.Execution) (realy.Result, error) {
+func (e demoExecutor) Execute(ctx context.Context, execution relay.Execution) (relay.Result, error) {
 	workDir := filepath.Join(e.workRoot, execution.RunID)
-	path, err := realy.MaterializeInstructions(workDir, "mock", execution.Instructions)
+	path, err := relay.MaterializeInstructions(workDir, "mock", execution.Instructions)
 	if err != nil {
-		return realy.Result{}, err
+		return relay.Result{}, err
 	}
-	issue, err := execution.Capabilities.Call(ctx, realy.CapabilityCall{Name: "issue.read", Version: "1", Resource: execution.Source.ExternalID, IdempotencyKey: "read-primary-issue"})
+	issue, err := execution.Capabilities.Call(ctx, relay.CapabilityCall{Name: "issue.read", Version: "1", Resource: execution.Source.ExternalID, IdempotencyKey: "read-primary-issue"})
 	if err != nil {
-		return realy.Result{}, err
+		return relay.Result{}, err
 	}
 	output, _ := json.Marshal(map[string]any{"issue": json.RawMessage(issue.Output), "prompt": execution.Instructions.Prompt})
-	return realy.Result{Summary: "Compatible Realy node completed the distributed run", Output: output, Artifacts: []realy.Artifact{{Type: "instruction_file", Ref: path, Name: filepath.Base(path)}}}, nil
+	return relay.Result{Summary: "Compatible Relay node completed the distributed run", Output: output, Artifacts: []relay.Artifact{{Type: "instruction_file", Ref: path, Name: filepath.Base(path)}}}, nil
 }
 
-func demoRequest() realy.Request {
-	fragment := func(id, title, content string) realy.InstructionFragment {
-		return realy.InstructionFragment{ID: id, Version: "1", Title: title, Content: content}
+func demoRequest() relay.Request {
+	fragment := func(id, title, content string) relay.InstructionFragment {
+		return relay.InstructionFragment{ID: id, Version: "1", Title: title, Content: content}
 	}
-	return realy.Request{
-		AgentID: "engineering-agent", IdempotencyKey: "distributed-demo-1", Runtime: realy.RuntimeRequirement{Provider: "mock", Labels: map[string]string{"pool": "engineering"}},
-		Source: realy.Source{Kind: "multica.issue", ExternalID: "MUL-42"}, Input: realy.Input{Type: "task", Version: "1", Prompt: "Read the issue and propose the smallest implementation slice."},
-		Instructions: realy.InstructionBundle{Runtime: []realy.InstructionFragment{fragment("runtime", "Runtime contract", "Return a durable result before exiting.")}, Host: []realy.InstructionFragment{fragment("host", "Multica contract", "Use granted capabilities for live business data.")}, Turn: []realy.InstructionFragment{fragment("turn", "Current focus", "Validate multi-machine scheduling.")}},
-		Capabilities: []realy.CapabilityGrant{{Name: "issue.read", Version: "1", Effect: "read", Resources: []string{"MUL-42"}}}, Principal: realy.Principal{Type: "user", ID: "demo-user", AccountableID: "demo-user"},
+	return relay.Request{
+		AgentID: "engineering-agent", IdempotencyKey: "distributed-demo-1", Runtime: relay.RuntimeRequirement{Provider: "mock", Labels: map[string]string{"pool": "engineering"}},
+		Source: relay.Source{Kind: "multica.issue", ExternalID: "MUL-42"}, Input: relay.Input{Type: "task", Version: "1", Prompt: "Read the issue and propose the smallest implementation slice."},
+		Instructions: relay.InstructionBundle{Runtime: []relay.InstructionFragment{fragment("runtime", "Runtime contract", "Return a durable result before exiting.")}, Host: []relay.InstructionFragment{fragment("host", "Multica contract", "Use granted capabilities for live business data.")}, Turn: []relay.InstructionFragment{fragment("turn", "Current focus", "Validate multi-machine scheduling.")}},
+		Capabilities: []relay.CapabilityGrant{{Name: "issue.read", Version: "1", Effect: "read", Resources: []string{"MUL-42"}}}, Principal: relay.Principal{Type: "user", ID: "demo-user", AccountableID: "demo-user"},
 	}
 }

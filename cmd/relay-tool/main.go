@@ -12,13 +12,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/KDF5000/realy"
-	"github.com/KDF5000/realy/runtime/toolbridge"
+	"github.com/KDF5000/relay"
+	"github.com/KDF5000/relay/runtime/toolbridge"
 )
 
 func main() {
 	if len(os.Args) < 2 || os.Args[1] != "call" {
-		log.Fatal("usage: realy-tool call [flags] <capability>")
+		log.Fatal("usage: relay-tool call [flags] <capability>")
 	}
 	flags := flag.NewFlagSet("call", flag.ExitOnError)
 	version := flags.String("version", "1", "capability version")
@@ -32,11 +32,11 @@ func main() {
 	if *idempotency == "" {
 		log.Fatal("--idempotency is required")
 	}
-	call := realy.CapabilityCall{Name: flags.Arg(0), Version: *version, Resource: *resource, IdempotencyKey: *idempotency, Input: json.RawMessage(*input)}
+	call := relay.CapabilityCall{Name: flags.Arg(0), Version: *version, Resource: *resource, IdempotencyKey: *idempotency, Input: json.RawMessage(*input)}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	if bridgeDir := os.Getenv("REALY_TOOL_DIR"); bridgeDir != "" {
-		result, err := toolbridge.CallFile(ctx, bridgeDir, os.Getenv("REALY_TOOL_TOKEN"), call)
+	if bridgeDir := os.Getenv("RELAY_TOOL_DIR"); bridgeDir != "" {
+		result, err := toolbridge.CallFile(ctx, bridgeDir, os.Getenv("RELAY_TOOL_TOKEN"), call)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -49,11 +49,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, os.Getenv("REALY_TOOL_URL")+"/v1/call", bytes.NewReader(body))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, os.Getenv("RELAY_TOOL_URL")+"/v1/call", bytes.NewReader(body))
 	if err != nil {
 		log.Fatal(err)
 	}
-	request.Header.Set("Authorization", "Bearer "+os.Getenv("REALY_TOOL_TOKEN"))
+	request.Header.Set("Authorization", "Bearer "+os.Getenv("RELAY_TOOL_TOKEN"))
 	request.Header.Set("Content-Type", "application/json")
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {

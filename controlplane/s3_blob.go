@@ -23,7 +23,7 @@ type S3BlobStore struct {
 
 func NewS3BlobStore(options S3BlobOptions) (*S3BlobStore, error) {
 	if options.Endpoint == "" || options.Bucket == "" {
-		return nil, errors.New("realy blob: S3 endpoint and bucket are required")
+		return nil, errors.New("relay blob: S3 endpoint and bucket are required")
 	}
 	client, err := minio.New(options.Endpoint, &minio.Options{Creds: credentials.NewStaticV4(options.AccessKey, options.SecretKey, options.SessionToken), Secure: options.Secure, Region: options.Region})
 	if err != nil {

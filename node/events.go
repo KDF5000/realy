@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/KDF5000/realy/controlplane"
+	"github.com/KDF5000/relay/controlplane"
 )
 
 // Delivery is bounded in both time and payload size. Runtime output is blocked

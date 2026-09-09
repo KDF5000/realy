@@ -1,5 +1,5 @@
-// Command realyctl is a small terminal workbench for inspecting and driving a
-// Realy control plane without depending on a host product.
+// Command relayctl is a small terminal workbench for inspecting and driving a
+// Relay control plane without depending on a host product.
 package main
 
 import (
@@ -18,10 +18,10 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/KDF5000/realy"
-	"github.com/KDF5000/realy/controlplane"
-	"github.com/KDF5000/realy/sdk"
-	"github.com/KDF5000/realy/transport/httpapi"
+	"github.com/KDF5000/relay"
+	"github.com/KDF5000/relay/controlplane"
+	"github.com/KDF5000/relay/sdk"
+	"github.com/KDF5000/relay/transport/httpapi"
 )
 
 const defaultServerURL = "http://127.0.0.1:8787"
@@ -36,9 +36,9 @@ func main() {
 }
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
-	global := flag.NewFlagSet("realyctl", flag.ContinueOnError)
+	global := flag.NewFlagSet("relayctl", flag.ContinueOnError)
 	global.SetOutput(stderr)
-	server := global.String("server", envOr("REALY_SERVER_URL", defaultServerURL), "Realy control plane URL")
+	server := global.String("server", envOr("RELAY_SERVER_URL", defaultServerURL), "Relay control plane URL")
 	if err := global.Parse(args); err != nil {
 		return err
 	}
@@ -47,7 +47,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		printUsage(stdout)
 		return nil
 	}
-	client := sdk.New(httpapi.NewAuthenticatedClient(*server, os.Getenv("REALY_HOST_TOKEN")))
+	client := sdk.New(httpapi.NewAuthenticatedClient(*server, os.Getenv("RELAY_HOST_TOKEN")))
 	switch remaining[0] {
 	case "runtime", "runtimes":
 		if len(remaining) == 1 || remaining[1] == "list" {
@@ -55,7 +55,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		}
 	case "run":
 		if len(remaining) < 2 {
-			return errors.New("usage: realyctl run <submit|get|events|watch|cancel>")
+			return errors.New("usage: relayctl run <submit|get|events|watch|cancel>")
 		}
 		switch remaining[1] {
 		case "submit":
@@ -76,7 +76,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 			return runCancel(ctx, client, remaining[2:], stdout, stderr)
 		case "attempts":
 			if len(remaining) != 3 {
-				return errors.New("usage: realyctl run attempts <run-id>")
+				return errors.New("usage: relayctl run attempts <run-id>")
 			}
 			values, err := client.Attempts(ctx, remaining[2])
 			if err != nil {
@@ -85,7 +85,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 			return printJSON(stdout, values)
 		case "artifacts":
 			if len(remaining) != 3 {
-				return errors.New("usage: realyctl run artifacts <run-id>")
+				return errors.New("usage: relayctl run artifacts <run-id>")
 			}
 			values, err := client.Artifacts(ctx, remaining[2])
 			if err != nil {
@@ -94,7 +94,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 			return printJSON(stdout, values)
 		case "interactions":
 			if len(remaining) != 3 {
-				return errors.New("usage: realyctl run interactions <run-id>")
+				return errors.New("usage: relayctl run interactions <run-id>")
 			}
 			values, err := client.Interactions(ctx, remaining[2])
 			if err != nil {
@@ -104,7 +104,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		}
 	case "interaction":
 		if len(remaining) != 4 || remaining[1] != "resolve" {
-			return errors.New("usage: realyctl interaction resolve <interaction-id> <json-response>")
+			return errors.New("usage: relayctl interaction resolve <interaction-id> <json-response>")
 		}
 		var response json.RawMessage = []byte(remaining[3])
 		if !json.Valid(response) {
@@ -118,7 +118,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return printJSON(stdout, value)
 	case "session":
 		if len(remaining) != 3 || remaining[1] != "runs" {
-			return errors.New("usage: realyctl session runs <session-id>")
+			return errors.New("usage: relayctl session runs <session-id>")
 		}
 		values, err := client.SessionRuns(ctx, remaining[2], 50)
 		if err != nil {
@@ -127,7 +127,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return printJSON(stdout, values)
 	case "artifact":
 		if len(remaining) != 4 || remaining[1] != "download" {
-			return errors.New("usage: realyctl artifact download <artifact-id> <output-file>")
+			return errors.New("usage: relayctl artifact download <artifact-id> <output-file>")
 		}
 		reader, err := client.OpenArtifact(ctx, remaining[2])
 		if err != nil {
@@ -197,7 +197,7 @@ func runtimeList(ctx context.Context, client *sdk.Client, args []string, stdout,
 func runSubmit(ctx context.Context, client *sdk.Client, args []string, stdout, stderr io.Writer) error {
 	flags := flag.NewFlagSet("run submit", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	agent := flags.String("agent", "realyctl", "logical agent ID")
+	agent := flags.String("agent", "relayctl", "logical agent ID")
 	provider := flags.String("provider", "codex", "runtime provider")
 	runtimeID := flags.String("runtime-id", "", "bind to an exact runtime instance ID")
 	model := flags.String("model", "", "runtime model override")
@@ -243,7 +243,7 @@ func runSubmit(ctx context.Context, client *sdk.Client, args []string, stdout, s
 	if strings.TrimSpace(*prompt) == "" {
 		return errors.New("--prompt or --prompt-file is required")
 	}
-	parsedGrants := make([]realy.CapabilityGrant, 0, len(grants))
+	parsedGrants := make([]relay.CapabilityGrant, 0, len(grants))
 	for _, value := range grants {
 		grant, err := parseGrant(value)
 		if err != nil {
@@ -252,20 +252,20 @@ func runSubmit(ctx context.Context, client *sdk.Client, args []string, stdout, s
 		parsedGrants = append(parsedGrants, grant)
 	}
 	if *idempotency == "" {
-		*idempotency = fmt.Sprintf("realyctl-%d", time.Now().UnixNano())
+		*idempotency = fmt.Sprintf("relayctl-%d", time.Now().UnixNano())
 	}
-	queued, err := client.Submit(ctx, realy.Request{
+	queued, err := client.Submit(ctx, relay.Request{
 		AgentID:        *agent,
 		IdempotencyKey: *idempotency,
-		Runtime:        realy.RuntimeRequirement{ID: *runtimeID, Provider: *provider, Model: *model, Version: *runtimeVersion, Labels: labels},
+		Runtime:        relay.RuntimeRequirement{ID: *runtimeID, Provider: *provider, Model: *model, Version: *runtimeVersion, Labels: labels},
 		SessionID:      *sessionID,
-		Source:         realy.Source{Kind: *sourceKind, ExternalID: *sourceID},
-		Input:          realy.Input{Type: "task", Version: "1", Prompt: *prompt},
+		Source:         relay.Source{Kind: *sourceKind, ExternalID: *sourceID},
+		Input:          relay.Input{Type: "task", Version: "1", Prompt: *prompt},
 		Capabilities:   parsedGrants,
-		Principal:      realy.Principal{Type: *principalType, ID: *principalID},
-		Retry:          realy.RetryPolicy{MaxAttempts: *maxAttempts, Backoff: *retryBackoff},
+		Principal:      relay.Principal{Type: *principalType, ID: *principalID},
+		Retry:          relay.RetryPolicy{MaxAttempts: *maxAttempts, Backoff: *retryBackoff},
 		Timeout:        *timeout,
-		Workspace:      realy.WorkspaceSpec{Kind: *workspaceKind, Source: *workspaceSource, Ref: *workspaceRef, Subdir: *workspaceSubdir, Ephemeral: *workspaceEphemeral},
+		Workspace:      relay.WorkspaceSpec{Kind: *workspaceKind, Source: *workspaceSource, Ref: *workspaceRef, Subdir: *workspaceSubdir, Ephemeral: *workspaceEphemeral},
 	})
 	if err != nil {
 		return err
@@ -298,11 +298,11 @@ func runCancel(ctx context.Context, client *sdk.Client, args []string, stdout, s
 	}
 	if runID == "" {
 		if flags.NArg() != 1 {
-			return errors.New("usage: realyctl run cancel <run-id> [--reason TEXT]")
+			return errors.New("usage: relayctl run cancel <run-id> [--reason TEXT]")
 		}
 		runID = flags.Arg(0)
 	} else if flags.NArg() != 0 {
-		return errors.New("usage: realyctl run cancel <run-id> [--reason TEXT]")
+		return errors.New("usage: relayctl run cancel <run-id> [--reason TEXT]")
 	}
 	run, err := client.CancelRun(ctx, runID, controlplane.CancelRequest{Reason: *reason, RequestedBy: *requestedBy})
 	if err != nil {
@@ -323,7 +323,7 @@ func runGet(ctx context.Context, client *sdk.Client, args []string, stdout, stde
 		return err
 	}
 	if flags.NArg() != 1 {
-		return errors.New("usage: realyctl run get <run-id>")
+		return errors.New("usage: relayctl run get <run-id>")
 	}
 	run, err := client.Run(ctx, flags.Arg(0))
 	if err != nil {
@@ -344,7 +344,7 @@ func runEvents(ctx context.Context, client *sdk.Client, args []string, stdout, s
 		return err
 	}
 	if flags.NArg() != 1 {
-		return errors.New("usage: realyctl run events <run-id>")
+		return errors.New("usage: relayctl run events <run-id>")
 	}
 	events, err := client.Events(ctx, flags.Arg(0))
 	if err != nil {
@@ -365,7 +365,7 @@ func runWatchCommand(ctx context.Context, client *sdk.Client, args []string, std
 		return err
 	}
 	if flags.NArg() != 1 {
-		return errors.New("usage: realyctl run watch <run-id>")
+		return errors.New("usage: relayctl run watch <run-id>")
 	}
 	if *interval < 100*time.Millisecond {
 		return errors.New("--interval must be at least 100ms")
@@ -376,7 +376,7 @@ func runWatchCommand(ctx context.Context, client *sdk.Client, args []string, std
 func watchRun(ctx context.Context, client *sdk.Client, runID string, interval time.Duration, stdout io.Writer) error {
 	lastSequence := 0
 	for {
-		streamErr := client.StreamEvents(ctx, runID, lastSequence, func(event realy.Event) error {
+		streamErr := client.StreamEvents(ctx, runID, lastSequence, func(event relay.Event) error {
 			fmt.Fprintf(stdout, "%4d  %s  %-36s %s\n", event.Sequence, event.CreatedAt.Local().Format("15:04:05"), event.Type, compactJSON(event.Data))
 			lastSequence = event.Sequence
 			return nil
@@ -394,7 +394,7 @@ func watchRun(ctx context.Context, client *sdk.Client, runID string, interval ti
 		if terminalStatus(run.Status) {
 			fmt.Fprintln(stdout)
 			printRun(stdout, run)
-			if run.Status == realy.RunFailed {
+			if run.Status == relay.RunFailed {
 				return fmt.Errorf("run failed: %s", run.Error)
 			}
 			return nil
@@ -412,7 +412,7 @@ func watchRun(ctx context.Context, client *sdk.Client, runID string, interval ti
 	}
 }
 
-func printRun(output io.Writer, run realy.Run) {
+func printRun(output io.Writer, run relay.Run) {
 	writer := tabwriter.NewWriter(output, 0, 4, 2, ' ', 0)
 	fmt.Fprintf(writer, "RUN\t%s\n", run.ID)
 	fmt.Fprintf(writer, "STATUS\t%s\n", run.Status)
@@ -428,7 +428,7 @@ func printRun(output io.Writer, run realy.Run) {
 	_ = writer.Flush()
 }
 
-func printEvents(output io.Writer, events []realy.Event) {
+func printEvents(output io.Writer, events []relay.Event) {
 	writer := tabwriter.NewWriter(output, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(writer, "SEQ\tTIME\tTYPE\tDATA")
 	for _, event := range events {
@@ -437,13 +437,13 @@ func printEvents(output io.Writer, events []realy.Event) {
 	_ = writer.Flush()
 }
 
-func parseGrant(value string) (realy.CapabilityGrant, error) {
+func parseGrant(value string) (relay.CapabilityGrant, error) {
 	parts := strings.SplitN(value, ":", 3)
 	identity := strings.SplitN(parts[0], "@", 2)
 	if len(identity) != 2 || identity[0] == "" || identity[1] == "" {
-		return realy.CapabilityGrant{}, fmt.Errorf("invalid grant %q: expected name@version:effect:resources", value)
+		return relay.CapabilityGrant{}, fmt.Errorf("invalid grant %q: expected name@version:effect:resources", value)
 	}
-	grant := realy.CapabilityGrant{Name: identity[0], Version: identity[1], Effect: "read"}
+	grant := relay.CapabilityGrant{Name: identity[0], Version: identity[1], Effect: "read"}
 	if len(parts) >= 2 && parts[1] != "" {
 		grant.Effect = parts[1]
 	}
@@ -499,8 +499,8 @@ func capabilityInventory(values []controlplane.Capability) string {
 	return strings.Join(result, ", ")
 }
 
-func terminalStatus(status realy.RunStatus) bool {
-	return status == realy.RunSucceeded || status == realy.RunFailed || status == realy.RunCancelled
+func terminalStatus(status relay.RunStatus) bool {
+	return status == relay.RunSucceeded || status == relay.RunFailed || status == relay.RunCancelled
 }
 
 func compactJSON(value json.RawMessage) string {
@@ -553,33 +553,33 @@ func envOr(name, fallback string) string {
 }
 
 func printUsage(output io.Writer) {
-	fmt.Fprint(output, `Realy terminal workbench
+	fmt.Fprint(output, `Relay terminal workbench
 
 Usage:
-  realyctl [--server URL] runtime list [--json]
-  realyctl [--server URL] run submit --prompt TEXT [options]
-  realyctl [--server URL] run list
-  realyctl [--server URL] run get <run-id> [--json]
-  realyctl [--server URL] run events <run-id> [--json]
-  realyctl [--server URL] run watch <run-id>
-  realyctl [--server URL] run cancel <run-id> [--reason TEXT]
-  realyctl [--server URL] run list
-  realyctl [--server URL] run attempts <run-id>
-  realyctl [--server URL] run artifacts <run-id>
-  realyctl [--server URL] artifact download <artifact-id> <output-file>
-  realyctl [--server URL] run interactions <run-id>
-  realyctl [--server URL] interaction resolve <interaction-id> <json-response>
-  realyctl [--server URL] session runs <session-id>
-  realyctl [--server URL] run attempts|artifacts|interactions <run-id>
-  realyctl [--server URL] interaction resolve <interaction-id> <json-response>
-  realyctl [--server URL] artifact download <artifact-id> <output-file>
+  relayctl [--server URL] runtime list [--json]
+  relayctl [--server URL] run submit --prompt TEXT [options]
+  relayctl [--server URL] run list
+  relayctl [--server URL] run get <run-id> [--json]
+  relayctl [--server URL] run events <run-id> [--json]
+  relayctl [--server URL] run watch <run-id>
+  relayctl [--server URL] run cancel <run-id> [--reason TEXT]
+  relayctl [--server URL] run list
+  relayctl [--server URL] run attempts <run-id>
+  relayctl [--server URL] run artifacts <run-id>
+  relayctl [--server URL] artifact download <artifact-id> <output-file>
+  relayctl [--server URL] run interactions <run-id>
+  relayctl [--server URL] interaction resolve <interaction-id> <json-response>
+  relayctl [--server URL] session runs <session-id>
+  relayctl [--server URL] run attempts|artifacts|interactions <run-id>
+  relayctl [--server URL] interaction resolve <interaction-id> <json-response>
+  relayctl [--server URL] artifact download <artifact-id> <output-file>
 
 Submit examples:
-  realyctl run submit --provider codex --prompt "Inspect this workspace"
-  realyctl run submit --prompt "Read MUL-42" --grant issue.read@1:read:MUL-42
+  relayctl run submit --provider codex --prompt "Inspect this workspace"
+  relayctl run submit --prompt "Read MUL-42" --grant issue.read@1:read:MUL-42
 
 Environment:
-  REALY_SERVER_URL  control plane URL (default http://127.0.0.1:8787)
-  REALY_HOST_TOKEN  optional host bearer token
+  RELAY_SERVER_URL  control plane URL (default http://127.0.0.1:8787)
+  RELAY_HOST_TOKEN  optional host bearer token
 `)
 }

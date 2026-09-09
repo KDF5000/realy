@@ -1,4 +1,4 @@
-package realy_test
+package relay_test
 
 import (
 	"os"
@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/KDF5000/realy"
+	"github.com/KDF5000/relay"
 )
 
 func TestInstructionMaterializationPreservesHostContent(t *testing.T) {
@@ -15,20 +15,20 @@ func TestInstructionMaterializationPreservesHostContent(t *testing.T) {
 	if err := os.WriteFile(path, []byte("# Host-owned rules\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	compiled, err := (realy.DefaultInstructionCompiler{}).Compile(
-		realy.Input{Prompt: "base"},
-		realy.InstructionBundle{
-			Workspace: []realy.InstructionFragment{{Title: "Stable", Content: "keep this"}},
-			Turn:      []realy.InstructionFragment{{Title: "Turn", Content: "prompt only"}},
+	compiled, err := (relay.DefaultInstructionCompiler{}).Compile(
+		relay.Input{Prompt: "base"},
+		relay.InstructionBundle{
+			Workspace: []relay.InstructionFragment{{Title: "Stable", Content: "keep this"}},
+			Turn:      []relay.InstructionFragment{{Title: "Turn", Content: "prompt only"}},
 		},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := realy.MaterializeInstructions(dir, "codex", compiled); err != nil {
+	if _, err := relay.MaterializeInstructions(dir, "codex", compiled); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := realy.MaterializeInstructions(dir, "codex", compiled); err != nil {
+	if _, err := relay.MaterializeInstructions(dir, "codex", compiled); err != nil {
 		t.Fatal(err)
 	}
 	content, _ := os.ReadFile(path)
@@ -39,7 +39,7 @@ func TestInstructionMaterializationPreservesHostContent(t *testing.T) {
 	if strings.Contains(text, "prompt only") || !strings.Contains(compiled.Prompt, "prompt only") {
 		t.Fatalf("turn instruction leaked into stable file: %s", text)
 	}
-	if strings.Count(text, "BEGIN REALY-RUNTIME") != 1 {
+	if strings.Count(text, "BEGIN RELAY-RUNTIME") != 1 {
 		t.Fatalf("managed block duplicated: %s", text)
 	}
 }

@@ -12,25 +12,25 @@ import (
 	"strings"
 	"time"
 
-	"github.com/KDF5000/realy"
-	"github.com/KDF5000/realy/binding"
-	"github.com/KDF5000/realy/controlplane"
-	"github.com/KDF5000/realy/node"
-	runtimecodex "github.com/KDF5000/realy/runtime/codex"
-	"github.com/KDF5000/realy/sdk"
-	"github.com/KDF5000/realy/transport/httpapi"
+	"github.com/KDF5000/relay"
+	"github.com/KDF5000/relay/binding"
+	"github.com/KDF5000/relay/controlplane"
+	"github.com/KDF5000/relay/node"
+	runtimecodex "github.com/KDF5000/relay/runtime/codex"
+	"github.com/KDF5000/relay/sdk"
+	"github.com/KDF5000/relay/transport/httpapi"
 )
 
 func main() {
-	toolDirFlag := flag.String("tool-dir", "./bin", "directory containing realy-tool")
-	bindingFlag := flag.String("binding", "./bin/realy-example-capability", "capability CLI executable")
+	toolDirFlag := flag.String("tool-dir", "./bin", "directory containing relay-tool")
+	bindingFlag := flag.String("binding", "./bin/relay-example-capability", "capability CLI executable")
 	flag.Parse()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 	defer cancel()
 	toolDir := mustAbs(*toolDirFlag)
 	bindingCommand := mustAbs(*bindingFlag)
-	if err := requireExecutable(filepath.Join(toolDir, "realy-tool")); err != nil {
+	if err := requireExecutable(filepath.Join(toolDir, "relay-tool")); err != nil {
 		log.Fatal(err)
 	}
 	if err := requireExecutable(bindingCommand); err != nil {
@@ -40,7 +40,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	workRoot, err := os.MkdirTemp("", "realy-codex-capability-smoke-")
+	workRoot, err := os.MkdirTemp("", "relay-codex-capability-smoke-")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -68,12 +68,12 @@ func main() {
 	if _, err := worker.Register(ctx); err != nil {
 		log.Fatal(err)
 	}
-	queued, err := host.Submit(ctx, realy.Request{
+	queued, err := host.Submit(ctx, relay.Request{
 		AgentID:        "capability-smoke-test",
 		IdempotencyKey: "codex-capability-smoke-1",
-		Runtime:        realy.RuntimeRequirement{Provider: "codex"},
-		Input:          realy.Input{Type: "task", Version: "1", Prompt: "Use realy-tool to call the granted issue.read capability for resource MUL-42. Read the title from the returned JSON; do not guess it or inspect unrelated files. Reply with REALY_CODEX_CAPABILITY_OK: followed by that title."},
-		Capabilities:   []realy.CapabilityGrant{{Name: "issue.read", Version: "1", Effect: "read", Resources: []string{"MUL-42"}}},
+		Runtime:        relay.RuntimeRequirement{Provider: "codex"},
+		Input:          relay.Input{Type: "task", Version: "1", Prompt: "Use relay-tool to call the granted issue.read capability for resource MUL-42. Read the title from the returned JSON; do not guess it or inspect unrelated files. Reply with RELAY_CODEX_CAPABILITY_OK: followed by that title."},
+		Capabilities:   []relay.CapabilityGrant{{Name: "issue.read", Version: "1", Effect: "read", Resources: []string{"MUL-42"}}},
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -85,7 +85,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if completed.Result == nil || strings.TrimSpace(completed.Result.Summary) != "REALY_CODEX_CAPABILITY_OK: Fix flaky scheduler" {
+	if completed.Result == nil || strings.TrimSpace(completed.Result.Summary) != "RELAY_CODEX_CAPABILITY_OK: Fix flaky scheduler" {
 		log.Fatalf("unexpected Codex result: %+v", completed.Result)
 	}
 	events, err := host.Events(ctx, queued.ID)

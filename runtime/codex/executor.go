@@ -1,4 +1,4 @@
-// Package codex adapts the stable `codex exec` non-interactive CLI to Realy.
+// Package codex adapts the stable `codex exec` non-interactive CLI to Relay.
 package codex
 
 import (
@@ -14,9 +14,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/KDF5000/realy"
-	runtimeprocess "github.com/KDF5000/realy/runtime/process"
-	"github.com/KDF5000/realy/runtime/toolbridge"
+	"github.com/KDF5000/relay"
+	runtimeprocess "github.com/KDF5000/relay/runtime/process"
+	"github.com/KDF5000/relay/runtime/toolbridge"
 )
 
 type Config struct {
@@ -46,7 +46,7 @@ type Config struct {
 
 type Executor struct{ Config Config }
 
-func (e Executor) Execute(ctx context.Context, execution realy.Execution) (realy.Result, error) {
+func (e Executor) Execute(ctx context.Context, execution relay.Execution) (relay.Result, error) {
 	return ExecuteFork(ctx, e.Config, execution, ForkOptions{Name: "codex", DefaultBinary: "codex", InstructionProvider: "codex"})
 }
 
@@ -60,7 +60,7 @@ type ForkOptions struct {
 	PassEnv             []string
 }
 
-func ExecuteFork(ctx context.Context, config Config, execution realy.Execution, fork ForkOptions) (realy.Result, error) {
+func ExecuteFork(ctx context.Context, config Config, execution relay.Execution, fork ForkOptions) (relay.Result, error) {
 	if execution.Runtime.Model != "" {
 		config.Model = execution.Runtime.Model
 	}
@@ -77,7 +77,7 @@ func ExecuteFork(ctx context.Context, config Config, execution realy.Execution, 
 		return executeAppServer(ctx, config, execution, fork)
 	}
 	if config.Protocol != "" && config.Protocol != "exec" {
-		return realy.Result{}, fmt.Errorf("realy %s: unsupported protocol %q", fork.Name, config.Protocol)
+		return relay.Result{}, fmt.Errorf("relay %s: unsupported protocol %q", fork.Name, config.Protocol)
 	}
 	binary := config.Binary
 	if binary == "" {
@@ -88,10 +88,10 @@ func ExecuteFork(ctx context.Context, config Config, execution realy.Execution, 
 		sandbox = "workspace-write"
 	}
 	if sandbox != "read-only" && sandbox != "workspace-write" && sandbox != "danger-full-access" {
-		return realy.Result{}, fmt.Errorf("realy %s: unsupported sandbox %q", fork.Name, sandbox)
+		return relay.Result{}, fmt.Errorf("relay %s: unsupported sandbox %q", fork.Name, sandbox)
 	}
 	if sandbox == "danger-full-access" && !config.AllowDangerousSandbox {
-		return realy.Result{}, fmt.Errorf("realy %s: danger-full-access requires explicit AllowDangerousSandbox", fork.Name)
+		return relay.Result{}, fmt.Errorf("relay %s: danger-full-access requires explicit AllowDangerousSandbox", fork.Name)
 	}
 	workDir := execution.WorkDir
 	if workDir == "" {
@@ -100,26 +100,26 @@ func ExecuteFork(ctx context.Context, config Config, execution realy.Execution, 
 	if workDir == "" {
 		root := config.WorkRoot
 		if root == "" {
-			root = filepath.Join(os.TempDir(), "realy-runs")
+			root = filepath.Join(os.TempDir(), "relay-runs")
 		}
 		workDir = filepath.Join(root, execution.RunID)
 	}
 	if err := os.MkdirAll(workDir, 0o755); err != nil {
-		return realy.Result{}, err
+		return relay.Result{}, err
 	}
-	instructionPath, err := realy.MaterializeInstructions(workDir, fork.InstructionProvider, execution.Instructions)
+	instructionPath, err := relay.MaterializeInstructions(workDir, fork.InstructionProvider, execution.Instructions)
 	if err != nil {
-		return realy.Result{}, err
+		return relay.Result{}, err
 	}
-	resultDir := filepath.Join(workDir, ".realy")
+	resultDir := filepath.Join(workDir, ".relay")
 	if err := os.MkdirAll(resultDir, 0o700); err != nil {
-		return realy.Result{}, err
+		return relay.Result{}, err
 	}
 	finalPath := filepath.Join(resultDir, fork.Name+"-last-message.txt")
 
 	bridge, err := toolbridge.StartFile(execution.Capabilities, filepath.Join(resultDir, "tool-bridge"))
 	if err != nil {
-		return realy.Result{}, fmt.Errorf("realy %s: start tool bridge: %w", fork.Name, err)
+		return relay.Result{}, fmt.Errorf("relay %s: start tool bridge: %w", fork.Name, err)
 	}
 	defer bridge.Close()
 	args := []string{"exec", "--json", "--color", "never", "--sandbox", sandbox, "--cd", workDir, "--output-last-message", finalPath}
@@ -169,7 +169,7 @@ func ExecuteFork(ctx context.Context, config Config, execution realy.Execution, 
 	command.Env = runtimeEnv(config, bridge.Dir, bridge.Token, fork.PassEnv)
 	stdout, err := command.StdoutPipe()
 	if err != nil {
-		return realy.Result{}, err
+		return relay.Result{}, err
 	}
 	var stderr bytes.Buffer
 	command.Stderr = &limitedBuffer{buffer: &stderr, remaining: 4 << 20}
@@ -177,7 +177,7 @@ func ExecuteFork(ctx context.Context, config Config, execution realy.Execution, 
 		execution.Emit(ctx, "runtime."+fork.Name+".started", map[string]any{"binary": binary, "work_dir": workDir, "sandbox": sandbox})
 	}
 	if err := command.Start(); err != nil {
-		return realy.Result{}, fmt.Errorf("realy %s: start: %w", fork.Name, err)
+		return relay.Result{}, fmt.Errorf("relay %s: start: %w", fork.Name, err)
 	}
 
 	scanner := bufio.NewScanner(stdout)
@@ -211,20 +211,20 @@ func ExecuteFork(ctx context.Context, config Config, execution realy.Execution, 
 	scanErr := scanner.Err()
 	waitErr := command.Wait()
 	if scanErr != nil {
-		return realy.Result{}, fmt.Errorf("realy %s: read JSONL: %w", fork.Name, scanErr)
+		return relay.Result{}, fmt.Errorf("relay %s: read JSONL: %w", fork.Name, scanErr)
 	}
 	if waitErr != nil {
-		return realy.Result{}, fmt.Errorf("realy %s: process failed: %w: %s", fork.Name, waitErr, truncate(stderr.String(), 8192))
+		return relay.Result{}, fmt.Errorf("relay %s: process failed: %w: %s", fork.Name, waitErr, truncate(stderr.String(), 8192))
 	}
 	message, err := os.ReadFile(finalPath)
 	if err != nil {
-		return realy.Result{}, fmt.Errorf("realy %s: read final message: %w", fork.Name, err)
+		return relay.Result{}, fmt.Errorf("relay %s: read final message: %w", fork.Name, err)
 	}
 	output, _ := json.Marshal(map[string]any{"thread_id": threadID, "message": string(message), "work_dir": workDir})
 	if execution.Emit != nil {
 		execution.Emit(ctx, "runtime."+fork.Name+".completed", map[string]string{"thread_id": threadID})
 	}
-	return realy.Result{Summary: strings.TrimSpace(string(message)), Output: output, Artifacts: []realy.Artifact{{Type: "instruction_file", Ref: instructionPath, Name: filepath.Base(instructionPath)}, {Type: fork.Name + "_final_message", Ref: finalPath, Name: filepath.Base(finalPath)}}}, nil
+	return relay.Result{Summary: strings.TrimSpace(string(message)), Output: output, Artifacts: []relay.Artifact{{Type: "instruction_file", Ref: instructionPath, Name: filepath.Base(instructionPath)}, {Type: fork.Name + "_final_message", Ref: finalPath, Name: filepath.Base(finalPath)}}}, nil
 }
 
 func runtimeEnv(config Config, bridgeDir, toolToken string, forkEnv []string) []string {
@@ -264,8 +264,8 @@ func runtimeEnv(config Config, bridgeDir, toolToken string, forkEnv []string) []
 		path := os.Getenv("PATH")
 		environment = setEnv(environment, "PATH", toolDir+string(os.PathListSeparator)+path)
 	}
-	environment = setEnv(environment, "REALY_TOOL_DIR", bridgeDir)
-	environment = setEnv(environment, "REALY_TOOL_TOKEN", toolToken)
+	environment = setEnv(environment, "RELAY_TOOL_DIR", bridgeDir)
+	environment = setEnv(environment, "RELAY_TOOL_TOKEN", toolToken)
 	return environment
 }
 
@@ -287,7 +287,7 @@ func ProbeVersion(ctx context.Context, binary string) (string, error) {
 	}
 	output, err := exec.CommandContext(ctx, binary, "--version").CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("realy codex: probe version: %w: %s", err, output)
+		return "", fmt.Errorf("relay codex: probe version: %w: %s", err, output)
 	}
 	return ParseVersionOutput(string(output)), nil
 }
@@ -315,7 +315,7 @@ type limitedBuffer struct {
 
 func (w *limitedBuffer) Write(value []byte) (int, error) {
 	if len(value) > w.remaining {
-		return 0, errors.New("realy codex: stderr limit exceeded")
+		return 0, errors.New("relay codex: stderr limit exceeded")
 	}
 	n, err := w.buffer.Write(value)
 	w.remaining -= n

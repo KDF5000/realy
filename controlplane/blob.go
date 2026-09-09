@@ -40,7 +40,7 @@ func (s *MemoryBlobStore) Delete(_ context.Context, key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.values[key]; !ok {
-		return errors.New("realy blob: not found")
+		return errors.New("relay blob: not found")
 	}
 	delete(s.values, key)
 	return nil

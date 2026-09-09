@@ -15,15 +15,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/KDF5000/realy"
-	"github.com/KDF5000/realy/binding"
-	"github.com/KDF5000/realy/controlplane"
-	"github.com/KDF5000/realy/node"
-	runtimecodex "github.com/KDF5000/realy/runtime/codex"
-	runtimecommand "github.com/KDF5000/realy/runtime/command"
-	runtimetrae "github.com/KDF5000/realy/runtime/trae"
-	"github.com/KDF5000/realy/transport/httpapi"
-	"github.com/KDF5000/realy/workspace"
+	"github.com/KDF5000/relay"
+	"github.com/KDF5000/relay/binding"
+	"github.com/KDF5000/relay/controlplane"
+	"github.com/KDF5000/relay/node"
+	runtimecodex "github.com/KDF5000/relay/runtime/codex"
+	runtimecommand "github.com/KDF5000/relay/runtime/command"
+	runtimetrae "github.com/KDF5000/relay/runtime/trae"
+	"github.com/KDF5000/relay/transport/httpapi"
+	"github.com/KDF5000/relay/workspace"
 )
 
 type config struct {
@@ -78,7 +78,7 @@ type bindingConfig struct {
 }
 
 func main() {
-	configPath := flag.String("config", "realy-node.json", "node configuration file")
+	configPath := flag.String("config", "relay-node.json", "node configuration file")
 	poll := flag.Duration("poll", time.Second, "queue polling interval")
 	heartbeat := flag.Duration("heartbeat", 5*time.Second, "node heartbeat interval")
 	drainTimeout := flag.Duration("drain-timeout", 30*time.Second, "maximum graceful shutdown drain time")
@@ -96,7 +96,7 @@ func main() {
 	}
 	registry := binding.NewRegistry()
 	for _, item := range cfg.Bindings {
-		var provider realy.CapabilityProvider
+		var provider relay.CapabilityProvider
 		if item.Kind == "exec" {
 			provider = binding.ExecProvider{Config: binding.Exec{Command: item.Command, Args: item.Args, Env: item.Env, InheritEnv: item.InheritEnv}}
 		} else if item.Kind == "http" {
@@ -145,7 +145,7 @@ func main() {
 	}
 	token := cfg.Token
 	if token == "" {
-		token = os.Getenv("REALY_NODE_TOKEN")
+		token = os.Getenv("RELAY_NODE_TOKEN")
 	}
 	client := httpapi.NewAuthenticatedClient(cfg.Server, token)
 	if cfg.OutboxRoot == "" {
@@ -153,7 +153,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		cfg.OutboxRoot = filepath.Join(root, "realy", "outbox")
+		cfg.OutboxRoot = filepath.Join(root, "relay", "outbox")
 	}
 	scope := sha256.Sum256([]byte(cfg.Server + "\x00" + cfg.Node.ID))
 	cfg.OutboxRoot = filepath.Join(cfg.OutboxRoot, fmt.Sprintf("%x", scope[:16]))
@@ -170,7 +170,7 @@ func main() {
 	if _, err := worker.Register(executionCtx); err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("Realy node %s registered", cfg.Node.ID)
+	log.Printf("Relay node %s registered", cfg.Node.ID)
 	if err := outbox.Recover(executionCtx, client, func(message string) { log.Print(message) }); err != nil {
 		log.Fatalf("outbox recovery failed; pending events retained: %v", err)
 	}
@@ -206,7 +206,7 @@ func main() {
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(signals)
 	<-signals
-	log.Printf("Realy node %s draining", cfg.Node.ID)
+	log.Printf("Relay node %s draining", cfg.Node.ID)
 	stopClaims()
 	timer := time.NewTimer(*drainTimeout)
 	select {
@@ -287,7 +287,7 @@ func discoverRuntimeModels(item *runtimeConfig, kind string) {
 		models, err = runtimecodex.ProbeModels(ctx, compatibleConfig(*item), runtimecodex.ForkOptions{Name: "codex", DefaultBinary: "codex"})
 	}
 	if err != nil {
-		log.Printf("Realy %s model discovery unavailable: %v", item.Provider, err)
+		log.Printf("Relay %s model discovery unavailable: %v", item.Provider, err)
 		return
 	}
 	for _, model := range models {

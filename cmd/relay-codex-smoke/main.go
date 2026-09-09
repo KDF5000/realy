@@ -9,13 +9,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/KDF5000/realy"
-	"github.com/KDF5000/realy/binding"
-	"github.com/KDF5000/realy/controlplane"
-	"github.com/KDF5000/realy/node"
-	runtimecodex "github.com/KDF5000/realy/runtime/codex"
-	"github.com/KDF5000/realy/sdk"
-	"github.com/KDF5000/realy/transport/httpapi"
+	"github.com/KDF5000/relay"
+	"github.com/KDF5000/relay/binding"
+	"github.com/KDF5000/relay/controlplane"
+	"github.com/KDF5000/relay/node"
+	runtimecodex "github.com/KDF5000/relay/runtime/codex"
+	"github.com/KDF5000/relay/sdk"
+	"github.com/KDF5000/relay/transport/httpapi"
 )
 
 func main() {
@@ -25,7 +25,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	workRoot, err := os.MkdirTemp("", "realy-codex-smoke-")
+	workRoot, err := os.MkdirTemp("", "relay-codex-smoke-")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func main() {
 	if _, err := worker.Register(ctx); err != nil {
 		log.Fatal(err)
 	}
-	queued, err := host.Submit(ctx, realy.Request{AgentID: "smoke-test", IdempotencyKey: "codex-smoke-1", Runtime: realy.RuntimeRequirement{Provider: "codex"}, Input: realy.Input{Type: "task", Version: "1", Prompt: "This is a Realy runtime connectivity test. Do not modify files and do not run shell commands. Reply with exactly: REALY_CODEX_OK"}, Instructions: realy.InstructionBundle{Runtime: []realy.InstructionFragment{{ID: "smoke", Version: "1", Title: "Smoke test", Content: "Follow the prompt exactly and finish immediately."}}}})
+	queued, err := host.Submit(ctx, relay.Request{AgentID: "smoke-test", IdempotencyKey: "codex-smoke-1", Runtime: relay.RuntimeRequirement{Provider: "codex"}, Input: relay.Input{Type: "task", Version: "1", Prompt: "This is a Relay runtime connectivity test. Do not modify files and do not run shell commands. Reply with exactly: RELAY_CODEX_OK"}, Instructions: relay.InstructionBundle{Runtime: []relay.InstructionFragment{{ID: "smoke", Version: "1", Title: "Smoke test", Content: "Follow the prompt exactly and finish immediately."}}}})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func main() {
 	}
 	output := struct {
 		CodexVersion string    `json:"codex_version"`
-		Run          realy.Run `json:"run"`
+		Run          relay.Run `json:"run"`
 		EventCount   int       `json:"event_count"`
 		WorkRoot     string    `json:"work_root"`
 	}{version, completed, len(events), workRoot}

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/KDF5000/realy/controlplane"
+	"github.com/KDF5000/relay/controlplane"
 )
 
 type Token struct {
@@ -38,7 +38,7 @@ func authenticate(next http.Handler, auth Authenticator) http.Handler {
 		value := ""
 		if strings.HasPrefix(header, "Bearer ") {
 			value = strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))
-		} else if cookie, err := r.Cookie("realy_host_token"); err == nil {
+		} else if cookie, err := r.Cookie("relay_host_token"); err == nil {
 			value = cookie.Value
 		}
 		if value == "" {

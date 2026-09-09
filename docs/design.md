@@ -1,4 +1,4 @@
-# Realy 分布式 Agent 执行组件设计
+# Relay 分布式 Agent 执行组件设计
 
 状态：最小可发布版本，核心可靠性契约已建立，2026 年 9 月。
 
@@ -7,7 +7,7 @@
 
 ## 1. 产品定位
 
-Realy 是一个可被不同业务项目复用的分布式 Agent 执行基础组件，提供 SDK 与可独立部署的
+Relay 是一个可被不同业务项目复用的分布式 Agent 执行基础组件，提供 SDK 与可独立部署的
 Server / Node。Web Playground 只是验证接口的参考应用，不定义核心 Agent 或聊天模型。
 
 业务项目只需要关注：
@@ -17,7 +17,7 @@ Server / Node。Web Playground 只是验证接口的参考应用，不定义核�
 - Agent 可以调用哪些业务能力；
 - 如何消费执行事件和最终结果。
 
-Realy 负责：
+Relay 负责：
 
 - 管理执行机器；
 - 管理 Codex、Trae 和自定义 Runtime；
@@ -27,17 +27,17 @@ Realy 负责：
 - Capability 授权、路由和审计；
 - Run、Attempt、Event 与 Artifact。
 
-Realy 不是 Todo 系统，也不理解 Issue、Chat、Inbox 或 Project 的业务含义。
+Relay 不是 Todo 系统，也不理解 Issue、Chat、Inbox 或 Project 的业务含义。
 
 ## 2. 总体架构
 
 ```text
 Multica / CI / IDE / 客服系统
-  └── Realy Host SDK
+  └── Relay Host SDK
         │
         │ Submit / Cancel / Events / Result
         ▼
-Realy Control Plane
+Relay Control Plane
   ├── Run / Attempt 状态机
   ├── Node Registry 与心跳
   ├── Runtime / Capability Inventory
@@ -47,7 +47,7 @@ Realy Control Plane
         │
         │ Node Protocol
         ▼
-Realy Node（每台执行机器）
+Relay Node（每台执行机器）
   ├── Runtime 探测与进程监管
   ├── Workspace / Worktree 管理
   ├── Instruction 编译与生成
@@ -64,9 +64,9 @@ Realy Node（每台执行机器）
 
 ### 3.0 Node 分发
 
-Realy Node 通过 GitHub Release 提供 darwin/linux、amd64/arm64 的静态二进制包。仓库根目录
+Relay Node 通过 GitHub Release 提供 darwin/linux、amd64/arm64 的静态二进制包。仓库根目录
 的 `install.sh` 负责平台识别、下载、SHA-256 校验、Runtime CLI 自动发现和 Node 配置生成。
-Server 地址属于部署配置，通过 `--server` 或 `REALY_SERVER_URL` 注入，不编译进 Node。
+Server 地址属于部署配置，通过 `--server` 或 `RELAY_SERVER_URL` 注入，不编译进 Node。
 安装器默认只写用户目录，并在覆盖已有配置前创建备份。
 
 ### 3.1 Host SDK
@@ -76,14 +76,14 @@ Host SDK 是业务项目主要使用的接口。它隐藏底层 HTTP 或 RPC，�
 ```go
 client := sdk.New(transport)
 
-run, err := client.Submit(ctx, realy.Request{
+run, err := client.Submit(ctx, relay.Request{
     AgentID:        "engineering-agent",
     IdempotencyKey: "issue-42-run-1",
-    Runtime: realy.RuntimeRequirement{
+    Runtime: relay.RuntimeRequirement{
         Provider: "codex",
         Labels:   map[string]string{"pool": "engineering"},
     },
-    Input: realy.Input{Prompt: "处理这个 Issue"},
+    Input: relay.Input{Prompt: "处理这个 Issue"},
 })
 ```
 
@@ -106,9 +106,9 @@ Control Plane 是整个机器集群的事实来源，负责：
 
 Control Plane 不启动 Agent 子进程，也不保存宿主业务凭证。
 
-### 3.3 Realy Node
+### 3.3 Relay Node
 
-每台执行机器运行一个 Realy Node。Node 负责：
+每台执行机器运行一个 Relay Node。Node 负责：
 
 - 上报本机 Runtime、版本、Capability Binding 和容量；
 - 领取与本机能力匹配的任务；
@@ -175,7 +175,7 @@ Node 注册时上报：
 3. Node 拥有任务要求的全部 Capability Binding；
 4. Node 当前 Active 数小于 Capacity；
 
-Runtime 实例具有稳定 ID。Node 配置没有显式填写时，Realy 使用
+Runtime 实例具有稳定 ID。Node 配置没有显式填写时，Relay 使用
 `<node-id>/<provider>` 自动生成。任务只声明 `provider` 时采用动态调度，任意兼容实例都可
 领取；同时声明 `id` 时则固定到该实例。固定实例暂时离线或满载时任务保持排队，不做隐式
 故障转移，从而保证 Agent 与机器本地环境、凭据和工作区之间的绑定不会被破坏。
@@ -272,7 +272,7 @@ PostgreSQL 保存请求摘要、状态、结果和错误。新 Attempt 重放已
 }
 ```
 
-Realy 直接启动二进制，不经过 shell。协议规定：
+Relay 直接启动二进制，不经过 shell。协议规定：
 
 - stdin：`CapabilityRequest` JSON；
 - stdout：`{"output": ...}`；
@@ -286,10 +286,10 @@ Realy 直接启动二进制，不经过 shell。协议规定：
 
 ```bash
 multica capability list --format json
-multica capability invoke --protocol realy-v1
+multica capability invoke --protocol relay-v1
 ```
 
-首版由用户或机器管理员安装 CLI。Realy 只检测、执行并上报版本，不自动下载任意二进制，
+首版由用户或机器管理员安装 CLI。Relay 只检测、执行并上报版本，不自动下载任意二进制，
 避免过早引入供应链签名、升级回滚和多租户安装权限问题。
 
 ## 8. HTTP、RPC 与 MCP
@@ -308,7 +308,7 @@ HTTP Binding 向配置的 Endpoint 发送统一 `CapabilityRequest`，服务返�
 HTTP Token 通过 Node 环境变量引用，不写入任务或 Prompt。
 
 RPC Binding 暴露一个小型 `RPCClient` 接口，生成的 gRPC、Connect 或企业内部 RPC
-Client 都可以适配。Realy Core 不绑定特定 RPC 框架。
+Client 都可以适配。Relay Core 不绑定特定 RPC 框架。
 
 MCP 可以在未来作为另一种 Binding，但它与 CLI、HTTP、RPC 平级，不是 Control Plane
 和 Node 的核心协议。
@@ -318,25 +318,25 @@ MCP 可以在未来作为另一种 Binding，但它与 CLI、HTTP、RPC 平级�
 不能把 `multica-cli` 等完整工具直接暴露给 Agent，否则 Agent 可能绕过 Grant、资源范围、
 幂等和审计。
 
-Runtime 启动时，Realy Node 会建立短生命周期 Tool Bridge。Bridge 传输由 Runtime Adapter
+Runtime 启动时，Relay Node 会建立短生命周期 Tool Bridge。Bridge 传输由 Runtime Adapter
 选择，不属于 Capability 协议本身：
 
 - Codex 默认使用工作目录内、权限为 `0700` 的文件邮箱 IPC；这是因为 Codex sandbox
   可以禁止包括 loopback 在内的网络访问；
 - 不受该限制的通用 Command Runtime 可以使用只监听本机回环地址的 HTTP；
-- 两种方式都只向 Agent 暴露同一个 `realy-tool` 命令。
+- 两种方式都只向 Agent 暴露同一个 `relay-tool` 命令。
 
 Node 向 Runtime 子进程注入其中一组地址和一个当前 Run 专属的 Token：
 
 ```text
-REALY_TOOL_DIR 或 REALY_TOOL_URL
-REALY_TOOL_TOKEN
+RELAY_TOOL_DIR 或 RELAY_TOOL_URL
+RELAY_TOOL_TOKEN
 ```
 
 Agent 使用统一命令：
 
 ```bash
-realy-tool call \
+relay-tool call \
   --version 1 \
   --resource MUL-42 \
   --idempotency read-primary-issue \
@@ -347,7 +347,7 @@ realy-tool call \
 
 ```text
 Agent
-  → realy-tool
+  → relay-tool
   → Node 本地 Tool Bridge
   → Capability Grant / Scope / Idempotency 检查
   → Binding Registry
@@ -363,20 +363,20 @@ Runtime 进程默认不继承 Node 的完整环境。Codex Adapter 只透传 PAT
 `env` 显式配置。Binding 拥有独立环境，因此 Multica Token 等业务凭据不会进入 Agent
 进程。
 
-Multica 作为首个宿主实现 `multica capability invoke --protocol realy-v1`。它从 stdin
+Multica 作为首个宿主实现 `multica capability invoke --protocol relay-v1`。它从 stdin
 读取标准 `CapabilityRequest`，把 `issue.read@1` 映射到 Multica API，再向 stdout 返回
-标准结果。这个适配命令属于 Multica，不属于 Realy，因此 Realy Core 不包含 issue 或
+标准结果。这个适配命令属于 Multica，不属于 Relay，因此 Relay Core 不包含 issue 或
 workspace 语义。
 
 ## 10. Codex-like Runtime
 
 ### 10.1 Codex
 
-Realy 已实现真实 Codex Runtime Adapter，使用 OpenAI 官方稳定的 `codex exec` 非交互
+Relay 已实现真实 Codex Runtime Adapter，使用 OpenAI 官方稳定的 `codex exec` 非交互
 模式。当前适配器支持：
 
 - 从 stdin 传入 Prompt；
-- 使用 `--json` 接收 JSONL 事件并转为 Realy Event；
+- 使用 `--json` 接收 JSONL 事件并转为 Relay Event；
 - 使用 `--output-last-message` 获取最终回答；
 - 提取 Codex Thread ID；
 - 使用 `--sandbox read-only` 或 `workspace-write`；
@@ -396,7 +396,7 @@ Realy 已实现真实 Codex Runtime Adapter，使用 OpenAI 官方稳定的 `cod
 ### 10.2 TraeCode
 
 TraeCode CLI fork 自 Codex，并保留 `exec`、stdin Prompt、JSONL Event、最终消息文件、
-sandbox、model/profile 和 ephemeral 等核心契约。Realy 复用 Codex-like 执行内核，但对外
+sandbox、model/profile 和 ephemeral 等核心契约。Relay 复用 Codex-like 执行内核，但对外
 保持独立边界：
 
 - Runtime Provider 使用 `trae`；
@@ -405,7 +405,7 @@ sandbox、model/profile 和 ephemeral 等核心契约。Realy 复用 Codex-like 
 - Event 使用 `runtime.trae.*`，最终回答 Artifact 使用 `trae_final_message`；
 - 只额外透传显式允许的 `TRAE_HOME`、`TRAE_API_KEY`、`TRAE_BASE_URL`；
 - 支持 headless-safe 的 `permission_mode`、allowed/disallowed tools、shell timeout、ignore config/rules；
-- 继续使用 Realy 的进程组监管、Workspace、文件 Tool Bridge 和 Artifact 上传链路。
+- 继续使用 Relay 的进程组监管、Workspace、文件 Tool Bridge 和 Artifact 上传链路。
 
 Node 配置的 `kind` 可使用 `trae`、`traex` 或 `trae-cli`，建议稳定的业务 Provider 固定为
 `trae`，不要让二进制别名泄漏到任务模型。
@@ -414,14 +414,14 @@ Node 配置的 `kind` 可使用 `trae`、`traex` 或 `trae-cli`，建议稳定�
 
 指令按作用域分为：
 
-1. `runtime`：Realy 执行不变量；
+1. `runtime`：Relay 执行不变量；
 2. `host`：业务系统全局语义；
 3. `workspace`：仓库或项目规则；
 4. `agent`：Agent 长期角色；
 5. `turn`：当前任务临时要求。
 
 前四层编译为 Stable Instructions，可生成 `AGENTS.md`、`CLAUDE.md`、`QWEN.md`
-或 `CODEBUDDY.md`。Realy 只管理带标记的区块，保留用户已有内容。Turn 指令只进入
+或 `CODEBUDDY.md`。Relay 只管理带标记的区块，保留用户已有内容。Turn 指令只进入
 Prompt，不污染持久化项目文件。
 
 ## 12. 安全边界
@@ -441,15 +441,15 @@ Prompt，不污染持久化项目文件。
 - Artifact 访问控制、大小限制、SHA-256 与外部 Blob Store。
 
 内置静态 Token 适合单实例部署；嵌入宿主时可向 HTTP Handler 注入 `Authenticator` 对接
-Multica 身份系统或企业 IAM。生产环境仍应在 Realy 前配置 TLS/mTLS、Token 轮换和
+Multica 身份系统或企业 IAM。生产环境仍应在 Relay 前配置 TLS/mTLS、Token 轮换和
 Artifact 内容扫描。
 
-Realy 负责执行授权边界，但 Multica 仍然是 Issue 等业务对象的最终授权方。
+Relay 负责执行授权边界，但 Multica 仍然是 Issue 等业务对象的最终授权方。
 
 ## 13. 仓库结构
 
 ```text
-realy/
+relay/
 ├── engine.go                 嵌入式 Execution Kernel
 ├── capability.go             Grant、Scope 和幂等
 ├── instructions.go           指令编译与文件生成
@@ -468,21 +468,21 @@ realy/
 ├── runtime/trae/             真实 TraeCode CLI Adapter
 ├── sdk/                      业务项目 SDK
 ├── transport/httpapi/        当前 Host/Node 网络协议
-├── cmd/realy-server/         Control Plane 进程
-├── cmd/realy-node/           Node 进程
-├── cmd/realy-tool/           Agent 统一工具入口
+├── cmd/relay-server/         Control Plane 进程
+├── cmd/relay-node/           Node 进程
+├── cmd/relay-tool/           Agent 统一工具入口
 └── examples/multica/         两节点端到端示例
 ```
 
 ## 14. Multica 接入方式
 
-Realy 提供 `adapter/multica` 源码级适配器。Multica 在业务服务内调用 `DispatchIssue`，
+Relay 提供 `adapter/multica` 源码级适配器。Multica 在业务服务内调用 `DispatchIssue`，
 适配器负责把 Issue、Agent、Session 和 Principal 映射成通用 Request；这条 Host 路径不需要
 MCP，也不需要为业务语义增加 Connector。Node 侧用 `CapabilityBinding` 调用已安装的
-`multica capability invoke --protocol realy-v1`，业务凭据仍留在 Multica CLI。
+`multica capability invoke --protocol relay-v1`，业务凭据仍留在 Multica CLI。
 
-切流时保留 Multica 当前 daemon 作为回退路径，按 Workspace 或任务类型选择 Realy；完成
-行为对比后，再删除 Multica 中已经被 Realy 覆盖的调度、Workspace 和进程监管代码。
+切流时保留 Multica 当前 daemon 作为回退路径，按 Workspace 或任务类型选择 Relay；完成
+行为对比后，再删除 Multica 中已经被 Relay 覆盖的调度、Workspace 和进程监管代码。
 
 ## 15. 当前 MVP 验收范围
 

@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/KDF5000/realy"
+	"github.com/KDF5000/relay"
 )
 
 // MemoryStorage is intended for tests and demos. PostgreSQL is the production
@@ -18,24 +18,24 @@ import (
 type MemoryStorage struct {
 	mu              sync.Mutex
 	nodes           map[string]*Node
-	runs            map[string]*realy.Run
-	requests        map[string]realy.Request
-	events          map[string][]realy.Event
+	runs            map[string]*relay.Run
+	requests        map[string]relay.Request
+	events          map[string][]relay.Event
 	byIdempotency   map[string]string
-	artifacts       map[string]realy.Artifact
+	artifacts       map[string]relay.Artifact
 	artifactRuns    map[string][]string
 	capabilityCalls map[string]memoryCapabilityCall
-	attemptHistory  map[string][]realy.Attempt
-	interactions    map[string]*realy.Interaction
+	attemptHistory  map[string][]relay.Attempt
+	interactions    map[string]*relay.Interaction
 }
 
 type memoryCapabilityCall struct {
 	hash        string
-	reservation realy.CapabilityReservation
+	reservation relay.CapabilityReservation
 }
 
 func NewMemoryStorage() *MemoryStorage {
-	return &MemoryStorage{nodes: make(map[string]*Node), runs: make(map[string]*realy.Run), requests: make(map[string]realy.Request), events: make(map[string][]realy.Event), byIdempotency: make(map[string]string), artifacts: make(map[string]realy.Artifact), artifactRuns: make(map[string][]string), capabilityCalls: make(map[string]memoryCapabilityCall), attemptHistory: make(map[string][]realy.Attempt), interactions: make(map[string]*realy.Interaction)}
+	return &MemoryStorage{nodes: make(map[string]*Node), runs: make(map[string]*relay.Run), requests: make(map[string]relay.Request), events: make(map[string][]relay.Event), byIdempotency: make(map[string]string), artifacts: make(map[string]relay.Artifact), artifactRuns: make(map[string][]string), capabilityCalls: make(map[string]memoryCapabilityCall), attemptHistory: make(map[string][]relay.Attempt), interactions: make(map[string]*relay.Interaction)}
 }
 
 func (s *MemoryStorage) RegisterNode(_ context.Context, registration NodeRegistration) (Node, error) {
@@ -63,7 +63,7 @@ func (s *MemoryStorage) Heartbeat(_ context.Context, nodeID string) (Node, error
 	return *node, nil
 }
 
-func (s *MemoryStorage) Submit(_ context.Context, request realy.Request) (realy.Run, error) {
+func (s *MemoryStorage) Submit(_ context.Context, request relay.Request) (relay.Run, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	idempotencyScope := request.TenantID + "\x00" + request.ProjectID + "\x00" + request.IdempotencyKey
@@ -71,13 +71,13 @@ func (s *MemoryStorage) Submit(_ context.Context, request realy.Request) (realy.
 		return *s.runs[runID], nil
 	}
 	now := time.Now().UTC()
-	run := &realy.Run{ID: newControlPlaneID("run"), TenantID: request.TenantID, ProjectID: request.ProjectID, SessionID: request.SessionID, AgentID: request.AgentID, IdempotencyKey: request.IdempotencyKey, Runtime: request.Runtime, Source: request.Source, Status: realy.RunQueued, CreatedAt: now, Attempt: realy.Attempt{ID: newControlPlaneID("attempt"), Number: 1, Status: realy.AttemptQueued, AvailableAt: &now}}
+	run := &relay.Run{ID: newControlPlaneID("run"), TenantID: request.TenantID, ProjectID: request.ProjectID, SessionID: request.SessionID, AgentID: request.AgentID, IdempotencyKey: request.IdempotencyKey, Runtime: request.Runtime, Source: request.Source, Status: relay.RunQueued, CreatedAt: now, Attempt: relay.Attempt{ID: newControlPlaneID("attempt"), Number: 1, Status: relay.AttemptQueued, AvailableAt: &now}}
 	if timeout, _ := time.ParseDuration(request.Timeout); timeout > 0 {
 		deadline := now.Add(timeout)
 		run.DeadlineAt = &deadline
 	}
 	s.runs[run.ID] = run
-	s.attemptHistory[run.ID] = []realy.Attempt{run.Attempt}
+	s.attemptHistory[run.ID] = []relay.Attempt{run.Attempt}
 	s.requests[run.ID] = request
 	s.byIdempotency[idempotencyScope] = run.ID
 	s.appendEvent(run, "run.created", map[string]any{"status": run.Status})
@@ -98,23 +98,23 @@ func (s *MemoryStorage) Claim(_ context.Context, nodeID string, leaseTTL time.Du
 	now := time.Now().UTC()
 	for _, run := range s.runs {
 		if run.DeadlineAt != nil && !now.Before(*run.DeadlineAt) && run.CancelRequestedAt == nil {
-			s.cancelRunLocked(run, CancelRequest{Reason: "run timeout exceeded", RequestedBy: "realy"}, now)
+			s.cancelRunLocked(run, CancelRequest{Reason: "run timeout exceeded", RequestedBy: "relay"}, now)
 		}
-		if run.Status == realy.RunCancelling && (run.Attempt.Status == realy.AttemptLeased || run.Attempt.Status == realy.AttemptRunning) && run.Attempt.LeaseExpiresAt != nil && !now.Before(*run.Attempt.LeaseExpiresAt) {
+		if run.Status == relay.RunCancelling && (run.Attempt.Status == relay.AttemptLeased || run.Attempt.Status == relay.AttemptRunning) && run.Attempt.LeaseExpiresAt != nil && !now.Before(*run.Attempt.LeaseExpiresAt) {
 			s.finalizeCancellation(run, now)
 			continue
 		}
 		s.requeueExpired(run, now)
 	}
 	for _, run := range s.runs {
-		if run.Status != realy.RunQueued || run.Attempt.Status != realy.AttemptQueued || (run.Attempt.AvailableAt != nil && now.Before(*run.Attempt.AvailableAt)) {
+		if run.Status != relay.RunQueued || run.Attempt.Status != relay.AttemptQueued || (run.Attempt.AvailableAt != nil && now.Before(*run.Attempt.AvailableAt)) {
 			continue
 		}
 		request := s.requests[run.ID]
 		if !nodeMatches(*node, request) {
 			continue
 		}
-		run.Attempt.Status = realy.AttemptLeased
+		run.Attempt.Status = relay.AttemptLeased
 		run.Attempt.NodeID = nodeID
 		run.Attempt.LeaseToken = newControlPlaneID("lease")
 		node.Active++
@@ -133,7 +133,7 @@ func (s *MemoryStorage) Renew(_ context.Context, assignment Assignment, leaseTTL
 	if err != nil {
 		return LeaseUpdate{}, err
 	}
-	if run.Attempt.Status != realy.AttemptLeased && run.Attempt.Status != realy.AttemptRunning {
+	if run.Attempt.Status != relay.AttemptLeased && run.Attempt.Status != relay.AttemptRunning {
 		return LeaseUpdate{}, ErrInvalidTransition
 	}
 	now := time.Now().UTC()
@@ -154,35 +154,35 @@ func (s *MemoryStorage) Reconcile(_ context.Context, now time.Time, limit int) (
 			break
 		}
 		if run.DeadlineAt != nil && !now.Before(*run.DeadlineAt) && !terminalRun(run.Status) && run.CancelRequestedAt == nil {
-			s.cancelRunLocked(run, CancelRequest{Reason: "run timeout exceeded", RequestedBy: "realy"}, now)
+			s.cancelRunLocked(run, CancelRequest{Reason: "run timeout exceeded", RequestedBy: "relay"}, now)
 			recovered++
 		}
 	}
 	for _, run := range s.runs {
-		activeAttempt := run.Attempt.Status == realy.AttemptRunning || (run.Status == realy.RunCancelling && run.Attempt.Status == realy.AttemptLeased)
-		if recovered >= limit || (run.Status != realy.RunRunning && run.Status != realy.RunCancelling) || !activeAttempt || run.Attempt.LeaseExpiresAt == nil || now.Before(*run.Attempt.LeaseExpiresAt) {
+		activeAttempt := run.Attempt.Status == relay.AttemptRunning || (run.Status == relay.RunCancelling && run.Attempt.Status == relay.AttemptLeased)
+		if recovered >= limit || (run.Status != relay.RunRunning && run.Status != relay.RunCancelling) || !activeAttempt || run.Attempt.LeaseExpiresAt == nil || now.Before(*run.Attempt.LeaseExpiresAt) {
 			continue
 		}
-		if run.Status == realy.RunCancelling {
+		if run.Status == relay.RunCancelling {
 			s.finalizeCancellation(run, now)
 			recovered++
 			continue
 		}
 		s.releaseNode(run.Attempt.NodeID)
-		run.Attempt.Status = realy.AttemptLost
+		run.Attempt.Status = relay.AttemptLost
 		run.Attempt.CompletedAt = timePointer(now)
 		s.appendEvent(run, "attempt.lost", map[string]any{"node_id": run.Attempt.NodeID, "reason": "lease_expired"})
 		request := s.requests[run.ID]
 		if run.Attempt.Number >= request.Retry.MaxAttempts {
-			run.Status, run.Error, run.CompletedAt = realy.RunFailed, "attempt lease expired", timePointer(now)
+			run.Status, run.Error, run.CompletedAt = relay.RunFailed, "attempt lease expired", timePointer(now)
 			s.appendEvent(run, "run.failed", map[string]string{"error": run.Error})
 		} else {
 			next := now.Add(retryBackoff(request.Retry))
 			history := s.attemptHistory[run.ID]
 			history[len(history)-1] = run.Attempt
-			run.Attempt = realy.Attempt{ID: newControlPlaneID("attempt"), Number: run.Attempt.Number + 1, Status: realy.AttemptQueued, AvailableAt: &next}
+			run.Attempt = relay.Attempt{ID: newControlPlaneID("attempt"), Number: run.Attempt.Number + 1, Status: relay.AttemptQueued, AvailableAt: &next}
 			s.attemptHistory[run.ID] = append(history, run.Attempt)
-			run.Status, run.Error, run.StartedAt, run.CompletedAt = realy.RunQueued, "", nil, nil
+			run.Status, run.Error, run.StartedAt, run.CompletedAt = relay.RunQueued, "", nil, nil
 			s.appendEvent(run, "attempt.queued", map[string]any{"number": run.Attempt.Number, "available_at": next, "reason": "retry"})
 		}
 		recovered++
@@ -190,12 +190,12 @@ func (s *MemoryStorage) Reconcile(_ context.Context, now time.Time, limit int) (
 	return recovered, nil
 }
 
-func (s *MemoryStorage) CancelRun(_ context.Context, runID string, request CancelRequest) (realy.Run, error) {
+func (s *MemoryStorage) CancelRun(_ context.Context, runID string, request CancelRequest) (relay.Run, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	run := s.runs[runID]
 	if run == nil {
-		return realy.Run{}, ErrNotFound
+		return relay.Run{}, ErrNotFound
 	}
 	s.cancelRunLocked(run, request, time.Now().UTC())
 	return *run, nil
@@ -208,10 +208,10 @@ func (s *MemoryStorage) AcknowledgeCancellation(_ context.Context, assignment As
 	if err != nil {
 		return err
 	}
-	if run.Status == realy.RunCancelled {
+	if run.Status == relay.RunCancelled {
 		return nil
 	}
-	if run.Status != realy.RunCancelling {
+	if run.Status != relay.RunCancelling {
 		return ErrInvalidTransition
 	}
 	s.finalizeCancellation(run, time.Now().UTC())
@@ -225,10 +225,10 @@ func (s *MemoryStorage) Start(_ context.Context, assignment Assignment) error {
 	if err != nil {
 		return err
 	}
-	if run.Attempt.Status != realy.AttemptLeased {
+	if run.Attempt.Status != relay.AttemptLeased {
 		return ErrInvalidTransition
 	}
-	if run.Status == realy.RunCancelling {
+	if run.Status == relay.RunCancelling {
 		s.finalizeCancellation(run, time.Now().UTC())
 		return ErrRunCancelled
 	}
@@ -237,8 +237,8 @@ func (s *MemoryStorage) Start(_ context.Context, assignment Assignment) error {
 		return ErrInvalidLease
 	}
 	now := time.Now().UTC()
-	run.Status, run.StartedAt = realy.RunRunning, &now
-	run.Attempt.Status, run.Attempt.StartedAt = realy.AttemptRunning, &now
+	run.Status, run.StartedAt = relay.RunRunning, &now
+	run.Attempt.Status, run.Attempt.StartedAt = relay.AttemptRunning, &now
 	s.appendEvent(run, "attempt.started", map[string]string{"node_id": run.Attempt.NodeID})
 	s.appendEvent(run, "run.started", nil)
 	return nil
@@ -251,7 +251,7 @@ func (s *MemoryStorage) AppendEvent(_ context.Context, runID, attemptID, lease, 
 	if err != nil {
 		return err
 	}
-	if run.Attempt.Status != realy.AttemptRunning {
+	if run.Attempt.Status != relay.AttemptRunning {
 		return ErrInvalidTransition
 	}
 	id := EventIdentity(attemptID, lease, eventIDs)
@@ -272,7 +272,7 @@ func (s *MemoryStorage) AppendEvent(_ context.Context, runID, attemptID, lease, 
 	return nil
 }
 
-func (s *MemoryStorage) Complete(_ context.Context, assignment Assignment, result realy.Result) error {
+func (s *MemoryStorage) Complete(_ context.Context, assignment Assignment, result relay.Result) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	run := s.runs[assignment.RunID]
@@ -282,7 +282,7 @@ func (s *MemoryStorage) Complete(_ context.Context, assignment Assignment, resul
 	if run.Attempt.ID != assignment.AttemptID || assignment.LeaseToken == "" || run.Attempt.LeaseToken != assignment.LeaseToken {
 		return ErrInvalidLease
 	}
-	if run.Status == realy.RunSucceeded && run.Attempt.Status == realy.AttemptSucceeded {
+	if run.Status == relay.RunSucceeded && run.Attempt.Status == relay.AttemptSucceeded {
 		if run.Result != nil && SameValue(*run.Result, result) {
 			return nil
 		}
@@ -291,15 +291,15 @@ func (s *MemoryStorage) Complete(_ context.Context, assignment Assignment, resul
 	if run.Attempt.LeaseExpiresAt == nil || !time.Now().UTC().Before(*run.Attempt.LeaseExpiresAt) {
 		return ErrInvalidLease
 	}
-	if run.Attempt.Status != realy.AttemptRunning {
+	if run.Attempt.Status != relay.AttemptRunning {
 		return ErrInvalidTransition
 	}
-	if run.Status == realy.RunCancelling {
+	if run.Status == relay.RunCancelling {
 		return ErrRunCancelled
 	}
 	now := time.Now().UTC()
-	run.Status, run.Result, run.CompletedAt = realy.RunSucceeded, &result, &now
-	run.Attempt.Status, run.Attempt.CompletedAt = realy.AttemptSucceeded, &now
+	run.Status, run.Result, run.CompletedAt = relay.RunSucceeded, &result, &now
+	run.Attempt.Status, run.Attempt.CompletedAt = relay.AttemptSucceeded, &now
 	s.releaseNode(run.Attempt.NodeID)
 	s.appendEvent(run, "attempt.succeeded", nil)
 	s.appendEvent(run, "run.succeeded", result)
@@ -316,7 +316,7 @@ func (s *MemoryStorage) Fail(_ context.Context, assignment Assignment, cause str
 	if run.Attempt.ID != assignment.AttemptID || assignment.LeaseToken == "" || run.Attempt.LeaseToken != assignment.LeaseToken {
 		return ErrInvalidLease
 	}
-	if run.Status == realy.RunFailed && run.Attempt.Status == realy.AttemptFailed {
+	if run.Status == relay.RunFailed && run.Attempt.Status == relay.AttemptFailed {
 		if run.Error == cause {
 			return nil
 		}
@@ -325,36 +325,36 @@ func (s *MemoryStorage) Fail(_ context.Context, assignment Assignment, cause str
 	if run.Attempt.LeaseExpiresAt == nil || !time.Now().UTC().Before(*run.Attempt.LeaseExpiresAt) {
 		return ErrInvalidLease
 	}
-	if run.Attempt.Status != realy.AttemptRunning && run.Attempt.Status != realy.AttemptLeased {
+	if run.Attempt.Status != relay.AttemptRunning && run.Attempt.Status != relay.AttemptLeased {
 		return ErrInvalidTransition
 	}
-	if run.Status == realy.RunCancelling {
+	if run.Status == relay.RunCancelling {
 		s.finalizeCancellation(run, time.Now().UTC())
 		return ErrRunCancelled
 	}
 	now := time.Now().UTC()
-	run.Status, run.Error, run.CompletedAt = realy.RunFailed, cause, &now
-	run.Attempt.Status, run.Attempt.CompletedAt = realy.AttemptFailed, &now
+	run.Status, run.Error, run.CompletedAt = relay.RunFailed, cause, &now
+	run.Attempt.Status, run.Attempt.CompletedAt = relay.AttemptFailed, &now
 	s.releaseNode(run.Attempt.NodeID)
 	s.appendEvent(run, "attempt.failed", map[string]string{"error": cause})
 	s.appendEvent(run, "run.failed", map[string]string{"error": cause})
 	return nil
 }
 
-func (s *MemoryStorage) GetRun(_ context.Context, runID string) (realy.Run, error) {
+func (s *MemoryStorage) GetRun(_ context.Context, runID string) (relay.Run, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if run := s.runs[runID]; run != nil {
 		return *run, nil
 	}
-	return realy.Run{}, ErrNotFound
+	return relay.Run{}, ErrNotFound
 }
 
-func (s *MemoryStorage) Events(ctx context.Context, runID string) ([]realy.Event, error) {
+func (s *MemoryStorage) Events(ctx context.Context, runID string) ([]relay.Event, error) {
 	return s.EventsAfter(ctx, runID, 0)
 }
 
-func (s *MemoryStorage) EventsAfter(_ context.Context, runID string, after int) ([]realy.Event, error) {
+func (s *MemoryStorage) EventsAfter(_ context.Context, runID string, after int) ([]relay.Event, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.runs[runID] == nil {
@@ -365,7 +365,7 @@ func (s *MemoryStorage) EventsAfter(_ context.Context, runID string, after int) 
 	for index < len(values) && values[index].Sequence <= after {
 		index++
 	}
-	return append([]realy.Event(nil), values[index:]...), nil
+	return append([]relay.Event(nil), values[index:]...), nil
 }
 
 func (s *MemoryStorage) Nodes(_ context.Context) ([]Node, error) {
@@ -378,14 +378,14 @@ func (s *MemoryStorage) Nodes(_ context.Context) ([]Node, error) {
 	return result, nil
 }
 
-func (s *MemoryStorage) AddArtifact(_ context.Context, assignment Assignment, artifact realy.Artifact) error {
+func (s *MemoryStorage) AddArtifact(_ context.Context, assignment Assignment, artifact relay.Artifact) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	run, err := s.authorize(assignment.RunID, assignment.AttemptID, assignment.LeaseToken)
 	if err != nil {
 		return err
 	}
-	if run.Attempt.Status != realy.AttemptRunning {
+	if run.Attempt.Status != relay.AttemptRunning {
 		return ErrInvalidTransition
 	}
 	s.artifacts[artifact.ID] = artifact
@@ -394,52 +394,52 @@ func (s *MemoryStorage) AddArtifact(_ context.Context, assignment Assignment, ar
 	return nil
 }
 
-func (s *MemoryStorage) Artifacts(_ context.Context, runID string) ([]realy.Artifact, error) {
+func (s *MemoryStorage) Artifacts(_ context.Context, runID string) ([]relay.Artifact, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.runs[runID] == nil {
 		return nil, ErrNotFound
 	}
-	result := make([]realy.Artifact, 0, len(s.artifactRuns[runID]))
+	result := make([]relay.Artifact, 0, len(s.artifactRuns[runID]))
 	for _, id := range s.artifactRuns[runID] {
 		result = append(result, s.artifacts[id])
 	}
 	return result, nil
 }
 
-func (s *MemoryStorage) Artifact(_ context.Context, artifactID string) (realy.Artifact, error) {
+func (s *MemoryStorage) Artifact(_ context.Context, artifactID string) (relay.Artifact, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	value, ok := s.artifacts[artifactID]
 	if !ok {
-		return realy.Artifact{}, ErrNotFound
+		return relay.Artifact{}, ErrNotFound
 	}
 	return value, nil
 }
 
-func (s *MemoryStorage) ReserveCapability(_ context.Context, a Assignment, key, hash string, _ realy.CapabilityRequest) (realy.CapabilityReservation, error) {
+func (s *MemoryStorage) ReserveCapability(_ context.Context, a Assignment, key, hash string, _ relay.CapabilityRequest) (relay.CapabilityReservation, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	run, err := s.authorize(a.RunID, a.AttemptID, a.LeaseToken)
 	if err != nil {
-		return realy.CapabilityReservation{}, err
+		return relay.CapabilityReservation{}, err
 	}
-	if run.Attempt.Status != realy.AttemptRunning {
-		return realy.CapabilityReservation{}, ErrInvalidTransition
+	if run.Attempt.Status != relay.AttemptRunning {
+		return relay.CapabilityReservation{}, ErrInvalidTransition
 	}
 	mapKey := a.RunID + "\x00" + key
 	if old, ok := s.capabilityCalls[mapKey]; ok {
 		if old.hash != hash {
-			return realy.CapabilityReservation{}, realy.ErrIdempotencyConflict
+			return relay.CapabilityReservation{}, relay.ErrIdempotencyConflict
 		}
 		return old.reservation, nil
 	}
-	reservation := realy.CapabilityReservation{CallID: newControlPlaneID("call"), Execute: true}
+	reservation := relay.CapabilityReservation{CallID: newControlPlaneID("call"), Execute: true}
 	s.capabilityCalls[mapKey] = memoryCapabilityCall{hash: hash, reservation: reservation}
 	return reservation, nil
 }
 
-func (s *MemoryStorage) FinishCapability(_ context.Context, a Assignment, reservation realy.CapabilityReservation, result realy.CapabilityResult, cause string) error {
+func (s *MemoryStorage) FinishCapability(_ context.Context, a Assignment, reservation relay.CapabilityReservation, result relay.CapabilityResult, cause string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	run, err := s.authorize(a.RunID, a.AttemptID, a.LeaseToken)
@@ -460,10 +460,10 @@ func (s *MemoryStorage) FinishCapability(_ context.Context, a Assignment, reserv
 	return ErrNotFound
 }
 
-func (s *MemoryStorage) ListRuns(_ context.Context, tenant, project, session string, limit int) ([]realy.Run, error) {
+func (s *MemoryStorage) ListRuns(_ context.Context, tenant, project, session string, limit int) ([]relay.Run, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var values []realy.Run
+	var values []relay.Run
 	for _, run := range s.runs {
 		if (tenant == "" || run.TenantID == tenant) && (project == "" || run.ProjectID == project) && (session == "" || run.SessionID == session) {
 			values = append(values, *run)
@@ -478,53 +478,53 @@ func (s *MemoryStorage) ListRuns(_ context.Context, tenant, project, session str
 	}
 	return values, nil
 }
-func (s *MemoryStorage) Attempts(_ context.Context, runID string) ([]realy.Attempt, error) {
+func (s *MemoryStorage) Attempts(_ context.Context, runID string) ([]relay.Attempt, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	run := s.runs[runID]
 	if run == nil {
 		return nil, ErrNotFound
 	}
-	values := append([]realy.Attempt(nil), s.attemptHistory[runID]...)
+	values := append([]relay.Attempt(nil), s.attemptHistory[runID]...)
 	if len(values) > 0 {
 		values[len(values)-1] = run.Attempt
 	}
 	return values, nil
 }
-func (s *MemoryStorage) CreateInteraction(_ context.Context, a Assignment, request realy.InteractionRequest) (realy.Interaction, error) {
+func (s *MemoryStorage) CreateInteraction(_ context.Context, a Assignment, request relay.InteractionRequest) (relay.Interaction, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	run, err := s.authorize(a.RunID, a.AttemptID, a.LeaseToken)
 	if err != nil {
-		return realy.Interaction{}, err
+		return relay.Interaction{}, err
 	}
-	if run.Attempt.Status != realy.AttemptRunning {
-		return realy.Interaction{}, ErrInvalidTransition
+	if run.Attempt.Status != relay.AttemptRunning {
+		return relay.Interaction{}, ErrInvalidTransition
 	}
-	value := realy.Interaction{ID: newControlPlaneID("interaction"), RunID: run.ID, AttemptID: run.Attempt.ID, Kind: request.Kind, State: "pending", Prompt: request.Prompt, Data: request.Data, CreatedAt: time.Now().UTC()}
+	value := relay.Interaction{ID: newControlPlaneID("interaction"), RunID: run.ID, AttemptID: run.Attempt.ID, Kind: request.Kind, State: "pending", Prompt: request.Prompt, Data: request.Data, CreatedAt: time.Now().UTC()}
 	s.interactions[value.ID] = &value
 	s.appendEvent(run, "interaction.requested", value)
 	return value, nil
 }
-func (s *MemoryStorage) GetInteraction(_ context.Context, a Assignment, id string) (realy.Interaction, error) {
+func (s *MemoryStorage) GetInteraction(_ context.Context, a Assignment, id string) (relay.Interaction, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, err := s.authorize(a.RunID, a.AttemptID, a.LeaseToken); err != nil {
-		return realy.Interaction{}, err
+		return relay.Interaction{}, err
 	}
 	value := s.interactions[id]
 	if value == nil || value.RunID != a.RunID {
-		return realy.Interaction{}, ErrNotFound
+		return relay.Interaction{}, ErrNotFound
 	}
 	return *value, nil
 }
-func (s *MemoryStorage) Interactions(_ context.Context, runID string) ([]realy.Interaction, error) {
+func (s *MemoryStorage) Interactions(_ context.Context, runID string) ([]relay.Interaction, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.runs[runID] == nil {
 		return nil, ErrNotFound
 	}
-	var values []realy.Interaction
+	var values []relay.Interaction
 	for _, v := range s.interactions {
 		if v.RunID == runID {
 			values = append(values, *v)
@@ -533,19 +533,19 @@ func (s *MemoryStorage) Interactions(_ context.Context, runID string) ([]realy.I
 	sort.Slice(values, func(i, j int) bool { return values[i].CreatedAt.Before(values[j].CreatedAt) })
 	return values, nil
 }
-func (s *MemoryStorage) ResolveInteraction(_ context.Context, id string, response json.RawMessage, tenant, project string) (realy.Interaction, error) {
+func (s *MemoryStorage) ResolveInteraction(_ context.Context, id string, response json.RawMessage, tenant, project string) (relay.Interaction, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	value := s.interactions[id]
 	if value == nil {
-		return realy.Interaction{}, ErrNotFound
+		return relay.Interaction{}, ErrNotFound
 	}
 	run := s.runs[value.RunID]
 	if (tenant != "" && run.TenantID != tenant) || (project != "" && run.ProjectID != project) {
-		return realy.Interaction{}, ErrNotFound
+		return relay.Interaction{}, ErrNotFound
 	}
 	if value.State != "pending" {
-		return realy.Interaction{}, ErrInvalidTransition
+		return relay.Interaction{}, ErrInvalidTransition
 	}
 	now := time.Now().UTC()
 	value.State = "resolved"
@@ -555,7 +555,7 @@ func (s *MemoryStorage) ResolveInteraction(_ context.Context, id string, respons
 	return *value, nil
 }
 
-func (s *MemoryStorage) authorize(runID, attemptID, lease string) (*realy.Run, error) {
+func (s *MemoryStorage) authorize(runID, attemptID, lease string) (*relay.Run, error) {
 	run := s.runs[runID]
 	if run == nil {
 		return nil, ErrNotFound
@@ -576,56 +576,56 @@ func (s *MemoryStorage) releaseNode(nodeID string) {
 	}
 }
 
-func (s *MemoryStorage) requeueExpired(run *realy.Run, now time.Time) {
-	if run.Attempt.Status != realy.AttemptLeased || run.Attempt.LeaseExpiresAt == nil || now.Before(*run.Attempt.LeaseExpiresAt) {
+func (s *MemoryStorage) requeueExpired(run *relay.Run, now time.Time) {
+	if run.Attempt.Status != relay.AttemptLeased || run.Attempt.LeaseExpiresAt == nil || now.Before(*run.Attempt.LeaseExpiresAt) {
 		return
 	}
 	s.releaseNode(run.Attempt.NodeID)
 	s.appendEvent(run, "attempt.lease_expired", map[string]string{"node_id": run.Attempt.NodeID})
-	run.Attempt.Status, run.Attempt.NodeID, run.Attempt.LeaseToken, run.Attempt.LeaseExpiresAt = realy.AttemptQueued, "", "", nil
+	run.Attempt.Status, run.Attempt.NodeID, run.Attempt.LeaseToken, run.Attempt.LeaseExpiresAt = relay.AttemptQueued, "", "", nil
 }
 
-func (s *MemoryStorage) appendEvent(run *realy.Run, eventType string, value any) {
+func (s *MemoryStorage) appendEvent(run *relay.Run, eventType string, value any) {
 	data, _ := json.Marshal(value)
 	if value == nil {
 		data = nil
 	}
-	s.events[run.ID] = append(s.events[run.ID], realy.Event{ID: newControlPlaneID("event"), RunID: run.ID, AttemptID: run.Attempt.ID, Sequence: len(s.events[run.ID]) + 1, Type: eventType, Data: data, CreatedAt: time.Now().UTC()})
+	s.events[run.ID] = append(s.events[run.ID], relay.Event{ID: newControlPlaneID("event"), RunID: run.ID, AttemptID: run.Attempt.ID, Sequence: len(s.events[run.ID]) + 1, Type: eventType, Data: data, CreatedAt: time.Now().UTC()})
 }
 
-func (s *MemoryStorage) cancelRunLocked(run *realy.Run, request CancelRequest, now time.Time) {
+func (s *MemoryStorage) cancelRunLocked(run *relay.Run, request CancelRequest, now time.Time) {
 	if terminalRun(run.Status) || run.CancelRequestedAt != nil {
 		return
 	}
 	run.CancelRequestedAt = timePointer(now)
 	run.CancelReason = request.Reason
 	s.appendEvent(run, "run.cancel_requested", request)
-	if run.Attempt.Status == realy.AttemptQueued {
+	if run.Attempt.Status == relay.AttemptQueued {
 		s.finalizeCancellation(run, now)
 		return
 	}
-	run.Status = realy.RunCancelling
+	run.Status = relay.RunCancelling
 }
 
-func (s *MemoryStorage) finalizeCancellation(run *realy.Run, now time.Time) {
-	if run.Status == realy.RunCancelled {
+func (s *MemoryStorage) finalizeCancellation(run *relay.Run, now time.Time) {
+	if run.Status == relay.RunCancelled {
 		return
 	}
 	s.releaseNode(run.Attempt.NodeID)
-	run.Attempt.Status = realy.AttemptCancelled
+	run.Attempt.Status = relay.AttemptCancelled
 	run.Attempt.CompletedAt = timePointer(now)
-	run.Status = realy.RunCancelled
+	run.Status = relay.RunCancelled
 	run.CancelledAt = timePointer(now)
 	run.CompletedAt = timePointer(now)
 	s.appendEvent(run, "attempt.cancelled", map[string]string{"reason": run.CancelReason})
 	s.appendEvent(run, "run.cancelled", map[string]string{"reason": run.CancelReason})
 }
 
-func terminalRun(status realy.RunStatus) bool {
-	return status == realy.RunSucceeded || status == realy.RunFailed || status == realy.RunCancelled
+func terminalRun(status relay.RunStatus) bool {
+	return status == relay.RunSucceeded || status == relay.RunFailed || status == relay.RunCancelled
 }
 
-func nodeMatches(node Node, request realy.Request) bool {
+func nodeMatches(node Node, request relay.Request) bool {
 	foundRuntime := false
 	for _, runtime := range node.Runtimes {
 		if RuntimeMatches(runtime, request.Runtime) {
@@ -664,7 +664,7 @@ func newControlPlaneID(prefix string) string {
 	return fmt.Sprintf("%s_%s", prefix, hex.EncodeToString(value[:]))
 }
 
-func retryBackoff(policy realy.RetryPolicy) time.Duration {
+func retryBackoff(policy relay.RetryPolicy) time.Duration {
 	backoff, _ := time.ParseDuration(policy.Backoff)
 	return backoff
 }

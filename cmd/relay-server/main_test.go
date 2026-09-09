@@ -16,7 +16,7 @@ func TestDefaultListenAddress(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			t.Setenv("REALY_LISTEN", test.listen)
+			t.Setenv("RELAY_LISTEN", test.listen)
 			t.Setenv("PORT", test.port)
 			if actual := defaultListenAddress(); actual != test.expected {
 				t.Fatalf("defaultListenAddress() = %q, want %q", actual, test.expected)

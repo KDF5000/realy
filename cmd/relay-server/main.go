@@ -8,29 +8,29 @@ import (
 	"os"
 	"time"
 
-	"github.com/KDF5000/realy/controlplane"
-	controlplanepostgres "github.com/KDF5000/realy/controlplane/postgres"
-	"github.com/KDF5000/realy/transport/httpapi"
+	"github.com/KDF5000/relay/controlplane"
+	controlplanepostgres "github.com/KDF5000/relay/controlplane/postgres"
+	"github.com/KDF5000/relay/transport/httpapi"
 )
 
 func main() {
-	listen := flag.String("listen", defaultListenAddress(), "HTTP listen address (env: REALY_LISTEN or PORT)")
+	listen := flag.String("listen", defaultListenAddress(), "HTTP listen address (env: RELAY_LISTEN or PORT)")
 	leaseTTL := flag.Duration("lease-ttl", 30*time.Second, "assignment lease duration")
 	nodeTimeout := flag.Duration("node-timeout", 15*time.Second, "time without heartbeat before a node is offline")
 	reconcileInterval := flag.Duration("reconcile-interval", 2*time.Second, "expired attempt recovery interval")
-	databaseURL := flag.String("database-url", os.Getenv("REALY_DATABASE_URL"), "PostgreSQL URL (env: REALY_DATABASE_URL)")
+	databaseURL := flag.String("database-url", os.Getenv("RELAY_DATABASE_URL"), "PostgreSQL URL (env: RELAY_DATABASE_URL)")
 	memory := flag.Bool("memory", false, "use ephemeral in-memory storage for tests and demos")
-	artifactRoot := flag.String("artifact-root", envOr("REALY_ARTIFACT_ROOT", "./.realy/artifacts"), "local artifact blob directory")
-	artifactBackend := flag.String("artifact-backend", envOr("REALY_ARTIFACT_BACKEND", "file"), "artifact backend: file or s3")
-	hostToken := flag.String("host-token", os.Getenv("REALY_HOST_TOKEN"), "host bearer token")
-	nodeToken := flag.String("node-token", os.Getenv("REALY_NODE_TOKEN"), "node bearer token")
-	tenantID := flag.String("tenant", envOr("REALY_TENANT_ID", "default"), "tenant assigned to the host token")
-	projectID := flag.String("project", envOr("REALY_PROJECT_ID", "default"), "project assigned to the host token")
+	artifactRoot := flag.String("artifact-root", envOr("RELAY_ARTIFACT_ROOT", "./.relay/artifacts"), "local artifact blob directory")
+	artifactBackend := flag.String("artifact-backend", envOr("RELAY_ARTIFACT_BACKEND", "file"), "artifact backend: file or s3")
+	hostToken := flag.String("host-token", os.Getenv("RELAY_HOST_TOKEN"), "host bearer token")
+	nodeToken := flag.String("node-token", os.Getenv("RELAY_NODE_TOKEN"), "node bearer token")
+	tenantID := flag.String("tenant", envOr("RELAY_TENANT_ID", "default"), "tenant assigned to the host token")
+	projectID := flag.String("project", envOr("RELAY_PROJECT_ID", "default"), "project assigned to the host token")
 	flag.Parse()
 	var blobs controlplane.BlobStore
 	var err error
 	if *artifactBackend == "s3" {
-		blobs, err = controlplane.NewS3BlobStore(controlplane.S3BlobOptions{Endpoint: os.Getenv("REALY_S3_ENDPOINT"), AccessKey: os.Getenv("REALY_S3_ACCESS_KEY"), SecretKey: os.Getenv("REALY_S3_SECRET_KEY"), SessionToken: os.Getenv("REALY_S3_SESSION_TOKEN"), Bucket: os.Getenv("REALY_S3_BUCKET"), Prefix: os.Getenv("REALY_S3_PREFIX"), Region: os.Getenv("REALY_S3_REGION"), Secure: os.Getenv("REALY_S3_SECURE") != "false"})
+		blobs, err = controlplane.NewS3BlobStore(controlplane.S3BlobOptions{Endpoint: os.Getenv("RELAY_S3_ENDPOINT"), AccessKey: os.Getenv("RELAY_S3_ACCESS_KEY"), SecretKey: os.Getenv("RELAY_S3_SECRET_KEY"), SessionToken: os.Getenv("RELAY_S3_SESSION_TOKEN"), Bucket: os.Getenv("RELAY_S3_BUCKET"), Prefix: os.Getenv("RELAY_S3_PREFIX"), Region: os.Getenv("RELAY_S3_REGION"), Secure: os.Getenv("RELAY_S3_SECURE") != "false"})
 	} else if *artifactBackend == "file" {
 		blobs, err = controlplane.NewFileBlobStore(*artifactRoot)
 	} else {
@@ -74,12 +74,12 @@ func main() {
 		handler = httpapi.NewHandlerWithAuth(service, httpapi.StaticTokens{{Value: *hostToken, Scope: controlplane.AccessScope{Kind: controlplane.AccessHost, TenantID: *tenantID, ProjectID: *projectID}}, {Value: *nodeToken, Scope: controlplane.AccessScope{Kind: controlplane.AccessNode}}})
 	}
 	server := &http.Server{Addr: *listen, Handler: handler, ReadHeaderTimeout: 10 * time.Second}
-	log.Printf("Realy control plane listening on %s", *listen)
+	log.Printf("Relay control plane listening on %s", *listen)
 	log.Fatal(server.ListenAndServe())
 }
 
 func defaultListenAddress() string {
-	if value := os.Getenv("REALY_LISTEN"); value != "" {
+	if value := os.Getenv("RELAY_LISTEN"); value != "" {
 		return value
 	}
 	if value := os.Getenv("PORT"); value != "" {

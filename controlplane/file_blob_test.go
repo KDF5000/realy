@@ -6,7 +6,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/KDF5000/realy/controlplane"
+	"github.com/KDF5000/relay/controlplane"
 )
 
 func TestFileBlobStoreRoundTripAndKeyValidation(t *testing.T) {

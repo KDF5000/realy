@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/KDF5000/realy"
-	"github.com/KDF5000/realy/controlplane"
+	"github.com/KDF5000/relay"
+	"github.com/KDF5000/relay/controlplane"
 )
 
 func assigned(t *testing.T) (*controlplane.Service, controlplane.Assignment) {
@@ -24,7 +24,7 @@ func assigned(t *testing.T) (*controlplane.Service, controlplane.Assignment) {
 	if _, err := cp.RegisterNode(ctx, controlplane.NodeRegistration{ID: "outbox-node", Capacity: 1, Runtimes: []controlplane.Runtime{{Provider: "test"}}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cp.Submit(ctx, realy.Request{AgentID: "agent", IdempotencyKey: "outbox", Runtime: realy.RuntimeRequirement{Provider: "test"}, Input: realy.Input{Prompt: "not persisted in outbox"}}); err != nil {
+	if _, err := cp.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "outbox", Runtime: relay.RuntimeRequirement{Provider: "test"}, Input: relay.Input{Prompt: "not persisted in outbox"}}); err != nil {
 		t.Fatal(err)
 	}
 	a, err := cp.Claim(ctx, "outbox-node")
@@ -39,12 +39,12 @@ func assigned(t *testing.T) (*controlplane.Service, controlplane.Assignment) {
 
 // The helper remains alive holding the queue lock until the parent SIGKILLs it.
 func TestOutboxCrashHelper(t *testing.T) {
-	root := os.Getenv("REALY_TEST_OUTBOX_CRASH")
+	root := os.Getenv("RELAY_TEST_OUTBOX_CRASH")
 	if root == "" {
 		return
 	}
 	var a controlplane.Assignment
-	if err := json.Unmarshal([]byte(os.Getenv("REALY_TEST_ASSIGNMENT")), &a); err != nil {
+	if err := json.Unmarshal([]byte(os.Getenv("RELAY_TEST_ASSIGNMENT")), &a); err != nil {
 		t.Fatal(err)
 	}
 	o, err := OpenOutbox(root, 0)
@@ -71,7 +71,7 @@ func TestOutboxSurvivesKilledProcess(t *testing.T) {
 			}
 			raw, _ := json.Marshal(a)
 			child := exec.Command(os.Args[0], "-test.run=^TestOutboxCrashHelper$")
-			child.Env = append(os.Environ(), "REALY_TEST_OUTBOX_CRASH="+root, "REALY_TEST_ASSIGNMENT="+string(raw))
+			child.Env = append(os.Environ(), "RELAY_TEST_OUTBOX_CRASH="+root, "RELAY_TEST_ASSIGNMENT="+string(raw))
 			stdout, err := child.StdoutPipe()
 			if err != nil {
 				t.Fatal(err)
@@ -108,7 +108,7 @@ func TestOutboxSurvivesKilledProcess(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if run.Status != realy.RunFailed || !strings.Contains(run.Error, "Node restarted") {
+			if run.Status != relay.RunFailed || !strings.Contains(run.Error, "Node restarted") {
 				t.Fatalf("run=%+v", run)
 			}
 			events, _ := cp.Events(ctx, a.RunID)
@@ -189,7 +189,7 @@ func TestOutboxExpiredLeaseDoesNotReplay(t *testing.T) {
 	if _, err := cp.RegisterNode(ctx, controlplane.NodeRegistration{ID: "expired-node", Capacity: 1, Runtimes: []controlplane.Runtime{{Provider: "test"}}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cp.Submit(ctx, realy.Request{AgentID: "agent", IdempotencyKey: "expired", Runtime: realy.RuntimeRequirement{Provider: "test"}, Input: realy.Input{Prompt: "work"}}); err != nil {
+	if _, err := cp.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "expired", Runtime: relay.RuntimeRequirement{Provider: "test"}, Input: relay.Input{Prompt: "work"}}); err != nil {
 		t.Fatal(err)
 	}
 	a, err := cp.Claim(ctx, "expired-node")

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/KDF5000/realy/controlplane"
+	"github.com/KDF5000/relay/controlplane"
 )
 
 // Outbox is a single-process, bounded durable event spool. Open a separate
@@ -104,7 +104,7 @@ func (o *Outbox) save(a controlplane.Assignment, id, kind string, data any) (str
 		}
 	}
 	if used > o.maxBytes {
-		return "", errors.New("realy node: outbox disk limit reached")
+		return "", errors.New("relay node: outbox disk limit reached")
 	}
 	if _, err := os.Stat(path); err == nil {
 		return "", errors.New("outbox event identity already exists")

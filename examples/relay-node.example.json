@@ -1,6 +1,6 @@
 {
   "server": "http://127.0.0.1:8787",
-  "workspace_root": "/tmp/realy-workspaces",
+  "workspace_root": "/tmp/relay-workspaces",
   "outbox_max_bytes": 67108864,
   "node": {
     "id": "developer-macbook",
@@ -20,7 +20,7 @@
       "command": "codex",
       "tool_dir": "./bin",
       "sandbox": "workspace-write",
-      "work_root": "/tmp/realy-runs",
+      "work_root": "/tmp/relay-runs",
       "ephemeral": true
     },
     {
@@ -31,7 +31,7 @@
       "command": "traex",
       "tool_dir": "./bin",
       "sandbox": "workspace-write",
-      "work_root": "/tmp/realy-runs",
+      "work_root": "/tmp/relay-runs",
       "ephemeral": true
     }
   ],
@@ -41,15 +41,15 @@
       "version": "1",
       "kind": "exec",
       "command": "multica",
-      "args": ["capability", "invoke", "--protocol", "realy-v1"],
+      "args": ["capability", "invoke", "--protocol", "relay-v1"],
       "inherit_env": true
     },
     {
       "name": "repository.search",
       "version": "1",
       "kind": "http",
-      "endpoint": "https://multica.example.com/realy/capabilities",
-      "token_env": "MULTICA_REALY_TOKEN"
+      "endpoint": "https://multica.example.com/relay/capabilities",
+      "token_env": "MULTICA_RELAY_TOKEN"
     }
   ]
 }

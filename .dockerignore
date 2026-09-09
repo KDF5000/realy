@@ -1,8 +1,8 @@
 .git
 .github
-.realy
+.relay
 bin
 artifact-output
-realy-node.json
+relay-node.json
 .env
 *.log

@@ -1,4 +1,4 @@
-// Package trae adapts TraeCode CLI's codex-compatible exec protocol to Realy.
+// Package trae adapts TraeCode CLI's codex-compatible exec protocol to Relay.
 package trae
 
 import (
@@ -6,15 +6,15 @@ import (
 	"fmt"
 	"os/exec"
 
-	"github.com/KDF5000/realy"
-	runtimecodex "github.com/KDF5000/realy/runtime/codex"
+	"github.com/KDF5000/relay"
+	runtimecodex "github.com/KDF5000/relay/runtime/codex"
 )
 
 type Config = runtimecodex.Config
 type ModelInfo = runtimecodex.ModelInfo
 type Executor struct{ Config Config }
 
-func (e Executor) Execute(ctx context.Context, execution realy.Execution) (realy.Result, error) {
+func (e Executor) Execute(ctx context.Context, execution relay.Execution) (relay.Result, error) {
 	config := e.Config
 	// Trae's interactive "default" mode may ask for approval, which is
 	// impossible under `exec`. Omitting it selects Trae's headless default.
@@ -22,7 +22,7 @@ func (e Executor) Execute(ctx context.Context, execution realy.Execution) (realy
 		config.PermissionMode = ""
 	}
 	if config.PermissionMode != "" && config.PermissionMode != "bypass_permissions" && config.PermissionMode != "custom" {
-		return realy.Result{}, fmt.Errorf("realy trae: unsupported headless permission mode %q", config.PermissionMode)
+		return relay.Result{}, fmt.Errorf("relay trae: unsupported headless permission mode %q", config.PermissionMode)
 	}
 	if config.Binary == "" {
 		config.Binary = ResolveBinary("")
@@ -34,7 +34,7 @@ func ProbeVersion(ctx context.Context, binary string) (string, error) {
 	binary = ResolveBinary(binary)
 	output, err := exec.CommandContext(ctx, binary, "--version").CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("realy trae: probe version: %w: %s", err, output)
+		return "", fmt.Errorf("relay trae: probe version: %w: %s", err, output)
 	}
 	return runtimecodex.ParseVersionOutput(string(output)), nil
 }

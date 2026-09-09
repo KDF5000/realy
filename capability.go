@@ -1,4 +1,4 @@
-package realy
+package relay
 
 import (
 	"context"
@@ -12,10 +12,10 @@ import (
 )
 
 var (
-	ErrCapabilityProviderMissing = errors.New("realy: capability provider is not configured")
-	ErrCapabilityNotGranted      = errors.New("realy: capability not granted")
-	ErrResourceOutOfScope        = errors.New("realy: capability resource out of scope")
-	ErrIdempotencyConflict       = errors.New("realy: idempotency key reused for a different capability call")
+	ErrCapabilityProviderMissing = errors.New("relay: capability provider is not configured")
+	ErrCapabilityNotGranted      = errors.New("relay: capability not granted")
+	ErrResourceOutOfScope        = errors.New("relay: capability resource out of scope")
+	ErrIdempotencyConflict       = errors.New("relay: idempotency key reused for a different capability call")
 )
 
 type capabilityCallState struct {
@@ -78,7 +78,7 @@ func (s *scopedCapabilities) Call(ctx context.Context, call CapabilityCall) (Cap
 		return CapabilityResult{}, ErrCapabilityProviderMissing
 	}
 	if call.IdempotencyKey == "" {
-		return CapabilityResult{}, errors.New("realy: capability idempotency key is required")
+		return CapabilityResult{}, errors.New("relay: capability idempotency key is required")
 	}
 
 	grant, err := findGrant(s.grants, call)
@@ -122,7 +122,7 @@ func (s *scopedCapabilities) Call(ctx context.Context, call CapabilityCall) (Cap
 				return CapabilityResult{}, err
 			}
 			if reservation.Result == nil {
-				err = errors.New("realy: capability call is still pending")
+				err = errors.New("relay: capability call is still pending")
 				s.finishCall(state, CapabilityResult{}, err)
 				return CapabilityResult{}, err
 			}

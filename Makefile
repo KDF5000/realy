@@ -1,13 +1,13 @@
-.PHONY: fmt test vet installer-check verify demo codex-smoke trae-smoke build-tools build-realyctl codex-capability-smoke server-up server-down db-up db-down postgres-test clean
+.PHONY: fmt test vet installer-check verify demo codex-smoke trae-smoke build-tools build-relayctl codex-capability-smoke server-up server-down db-up db-down postgres-test clean
 
 fmt:
-	GOCACHE=/private/tmp/realy-go-cache go fmt ./...
+	GOCACHE=/private/tmp/relay-go-cache go fmt ./...
 
 test:
-	GOCACHE=/private/tmp/realy-go-cache go test ./...
+	GOCACHE=/private/tmp/relay-go-cache go test ./...
 
 vet:
-	GOCACHE=/private/tmp/realy-go-cache go vet ./...
+	GOCACHE=/private/tmp/relay-go-cache go vet ./...
 
 installer-check:
 	sh -n ./install.sh
@@ -16,25 +16,25 @@ installer-check:
 verify: fmt vet test installer-check
 
 demo:
-	GOCACHE=/private/tmp/realy-go-cache go run ./examples/multica
+	GOCACHE=/private/tmp/relay-go-cache go run ./examples/multica
 
 codex-smoke:
-	GOCACHE=/private/tmp/realy-go-cache go run ./cmd/realy-codex-smoke
+	GOCACHE=/private/tmp/relay-go-cache go run ./cmd/relay-codex-smoke
 
 trae-smoke:
-	GOCACHE=/private/tmp/realy-go-cache go run ./cmd/realy-trae-smoke
+	GOCACHE=/private/tmp/relay-go-cache go run ./cmd/relay-trae-smoke
 
 build-tools:
 	mkdir -p bin
-	GOCACHE=/private/tmp/realy-go-cache go build -o bin/realy-tool ./cmd/realy-tool
-	GOCACHE=/private/tmp/realy-go-cache go build -o bin/realy-example-capability ./examples/capability-cli
+	GOCACHE=/private/tmp/relay-go-cache go build -o bin/relay-tool ./cmd/relay-tool
+	GOCACHE=/private/tmp/relay-go-cache go build -o bin/relay-example-capability ./examples/capability-cli
 
-build-realyctl:
+build-relayctl:
 	mkdir -p bin
-	GOCACHE=/private/tmp/realy-go-cache go build -o bin/realyctl ./cmd/realyctl
+	GOCACHE=/private/tmp/relay-go-cache go build -o bin/relayctl ./cmd/relayctl
 
 codex-capability-smoke: build-tools
-	GOCACHE=/private/tmp/realy-go-cache go run ./cmd/realy-codex-capability-smoke -tool-dir ./bin -binding ./bin/realy-example-capability
+	GOCACHE=/private/tmp/relay-go-cache go run ./cmd/relay-codex-capability-smoke -tool-dir ./bin -binding ./bin/relay-example-capability
 
 server-up:
 	docker compose up -d --build --wait
@@ -43,13 +43,13 @@ server-down:
 	docker compose down
 
 db-up:
-	POSTGRES_PASSWORD=realy REALY_HOST_TOKEN=local-host REALY_NODE_TOKEN=local-node docker compose up -d --wait postgres
+	POSTGRES_PASSWORD=relay RELAY_HOST_TOKEN=local-host RELAY_NODE_TOKEN=local-node docker compose up -d --wait postgres
 
 db-down:
-	POSTGRES_PASSWORD=realy REALY_HOST_TOKEN=local-host REALY_NODE_TOKEN=local-node docker compose stop postgres
+	POSTGRES_PASSWORD=relay RELAY_HOST_TOKEN=local-host RELAY_NODE_TOKEN=local-node docker compose stop postgres
 
 postgres-test:
-	REALY_TEST_DATABASE_URL='postgres://realy:realy@127.0.0.1:55432/realy?sslmode=disable' GOCACHE=/private/tmp/realy-go-cache go test ./controlplane/postgres -count=1 -v
+	RELAY_TEST_DATABASE_URL='postgres://relay:relay@127.0.0.1:55432/relay?sslmode=disable' GOCACHE=/private/tmp/relay-go-cache go test ./controlplane/postgres -count=1 -v
 
 clean:
-	rm -f bin/realy-tool bin/realy-example-capability bin/realyctl
+	rm -f bin/relay-tool bin/relay-example-capability bin/relayctl

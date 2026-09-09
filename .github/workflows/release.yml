@@ -48,13 +48,13 @@ jobs:
           CGO_ENABLED: "0"
         run: |
           mkdir -p package dist
-          go build -trimpath -ldflags="-s -w" -o package/realy-node ./cmd/realy-node
-          go build -trimpath -ldflags="-s -w" -o package/realy-tool ./cmd/realy-tool
-          go build -trimpath -ldflags="-s -w" -o package/realyctl ./cmd/realyctl
-          tar -C package -czf "dist/realy_${GOOS}_${GOARCH}.tar.gz" realy-node realy-tool realyctl
+          go build -trimpath -ldflags="-s -w" -o package/relay-node ./cmd/relay-node
+          go build -trimpath -ldflags="-s -w" -o package/relay-tool ./cmd/relay-tool
+          go build -trimpath -ldflags="-s -w" -o package/relayctl ./cmd/relayctl
+          tar -C package -czf "dist/relay_${GOOS}_${GOARCH}.tar.gz" relay-node relay-tool relayctl
       - uses: actions/upload-artifact@v4
         with:
-          name: realy-${{ matrix.os }}-${{ matrix.arch }}
+          name: relay-${{ matrix.os }}-${{ matrix.arch }}
           path: dist/*.tar.gz
           if-no-files-found: error
 
@@ -68,7 +68,7 @@ jobs:
           merge-multiple: true
       - name: Create checksums
         working-directory: dist
-        run: sha256sum realy_*.tar.gz > checksums.txt
+        run: sha256sum relay_*.tar.gz > checksums.txt
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

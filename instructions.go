@@ -1,4 +1,4 @@
-package realy
+package relay
 
 import (
 	"errors"
@@ -10,16 +10,16 @@ import (
 )
 
 const (
-	instructionMarkerBegin = "<!-- BEGIN REALY-RUNTIME (auto-managed; do not edit) -->"
-	instructionMarkerEnd   = "<!-- END REALY-RUNTIME -->"
+	instructionMarkerBegin = "<!-- BEGIN RELAY-RUNTIME (auto-managed; do not edit) -->"
+	instructionMarkerEnd   = "<!-- END RELAY-RUNTIME -->"
 )
 
 type DefaultInstructionCompiler struct{}
 
 func (DefaultInstructionCompiler) Compile(input Input, bundle InstructionBundle) (CompiledInstructions, error) {
 	var stable strings.Builder
-	stable.WriteString("# Realy Runtime\n\n")
-	stable.WriteString("This execution is managed by Realy. Return durable results before the top-level agent process exits.\n")
+	stable.WriteString("# Relay Runtime\n\n")
+	stable.WriteString("This execution is managed by Relay. Return durable results before the top-level agent process exits.\n")
 	for _, layer := range [][]InstructionFragment{bundle.Runtime, bundle.Host, bundle.Workspace, bundle.Agent} {
 		for _, fragment := range layer {
 			appendInstruction(&stable, fragment)
@@ -56,7 +56,7 @@ func appendInstruction(builder *strings.Builder, fragment InstructionFragment) {
 // capabilities granted to the current run.
 func CapabilityToolInstruction(grants []CapabilityGrant) InstructionFragment {
 	var builder strings.Builder
-	builder.WriteString("Use `realy-tool call` when live host data or actions are needed. Do not invoke host-specific CLIs directly. Every call requires a unique, stable `--idempotency` value.\n")
+	builder.WriteString("Use `relay-tool call` when live host data or actions are needed. Do not invoke host-specific CLIs directly. Every call requires a unique, stable `--idempotency` value.\n")
 	if len(grants) > 0 {
 		builder.WriteString("\nGranted capabilities:\n")
 		for _, grant := range grants {
@@ -73,11 +73,11 @@ func CapabilityToolInstruction(grants []CapabilityGrant) InstructionFragment {
 			builder.WriteByte('\n')
 		}
 	}
-	return InstructionFragment{ID: "realy-capability-tools", Version: "1", Title: "Realy capabilities", Content: builder.String()}
+	return InstructionFragment{ID: "relay-capability-tools", Version: "1", Title: "Relay capabilities", Content: builder.String()}
 }
 
 // MaterializeInstructions writes the stable instruction layer into the native file
-// expected by a provider while preserving host-owned content outside Realy's block.
+// expected by a provider while preserving host-owned content outside Relay's block.
 func MaterializeInstructions(workDir, provider string, compiled CompiledInstructions) (string, error) {
 	name, err := instructionFileName(provider)
 	if err != nil {
@@ -93,14 +93,14 @@ func MaterializeInstructions(workDir, provider string, compiled CompiledInstruct
 		return path, os.WriteFile(path, []byte(block), 0o644)
 	}
 	if err != nil {
-		return "", fmt.Errorf("realy: read instruction file: %w", err)
+		return "", fmt.Errorf("relay: read instruction file: %w", err)
 	}
 	content := string(existing)
 	start := strings.Index(content, instructionMarkerBegin)
 	if start >= 0 {
 		endRelative := strings.Index(content[start:], instructionMarkerEnd)
 		if endRelative < 0 {
-			return "", errors.New("realy: incomplete managed instruction marker")
+			return "", errors.New("relay: incomplete managed instruction marker")
 		}
 		end := start + endRelative + len(instructionMarkerEnd)
 		if end < len(content) && content[end] == '\n' {
@@ -126,6 +126,6 @@ func instructionFileName(provider string) (string, error) {
 	case "codebuddy":
 		return "CODEBUDDY.md", nil
 	default:
-		return "", fmt.Errorf("realy: unsupported instruction provider %q", provider)
+		return "", fmt.Errorf("relay: unsupported instruction provider %q", provider)
 	}
 }

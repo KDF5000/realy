@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/KDF5000/realy"
-	"github.com/KDF5000/realy/controlplane"
-	"github.com/KDF5000/realy/sdk"
-	"github.com/KDF5000/realy/transport/httpapi"
+	"github.com/KDF5000/relay"
+	"github.com/KDF5000/relay/controlplane"
+	"github.com/KDF5000/relay/sdk"
+	"github.com/KDF5000/relay/transport/httpapi"
 )
 
 var (
@@ -18,10 +18,10 @@ var (
 // A dispatch-only application needs no node, artifact or interaction methods.
 func ExampleSubmitter() {
 	var host sdk.Submitter = controlplane.New(0)
-	run, err := host.Submit(context.Background(), realy.Request{
+	run, err := host.Submit(context.Background(), relay.Request{
 		AgentID: "external-agent", IdempotencyKey: "example-task",
-		Runtime: realy.RuntimeRequirement{Provider: "codex"},
-		Input:   realy.Input{Prompt: "Inspect the repository"},
+		Runtime: relay.RuntimeRequirement{Provider: "codex"},
+		Input:   relay.Input{Prompt: "Inspect the repository"},
 	})
 	if err != nil {
 		panic(err)

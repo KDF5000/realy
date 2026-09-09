@@ -10,8 +10,8 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/KDF5000/realy"
-	runtimeprocess "github.com/KDF5000/realy/runtime/process"
+	"github.com/KDF5000/relay"
+	runtimeprocess "github.com/KDF5000/relay/runtime/process"
 )
 
 type Exec struct {
@@ -29,10 +29,10 @@ type execResponse struct {
 
 type ExecProvider struct{ Config Exec }
 
-func (p ExecProvider) Invoke(ctx context.Context, request realy.CapabilityRequest) (json.RawMessage, error) {
+func (p ExecProvider) Invoke(ctx context.Context, request relay.CapabilityRequest) (json.RawMessage, error) {
 	config := p.Config
 	if config.Command == "" {
-		return nil, fmt.Errorf("realy: exec binding command is required")
+		return nil, fmt.Errorf("relay: exec binding command is required")
 	}
 	input, err := json.Marshal(request)
 	if err != nil {
@@ -55,14 +55,14 @@ func (p ExecProvider) Invoke(ctx context.Context, request realy.CapabilityReques
 	command.Stdout = &limitedWriter{writer: &stdout, remaining: limit}
 	command.Stderr = &limitedWriter{writer: &stderr, remaining: limit}
 	if err := command.Run(); err != nil {
-		return nil, fmt.Errorf("realy: exec binding failed: %w: %s", err, stderr.String())
+		return nil, fmt.Errorf("relay: exec binding failed: %w: %s", err, stderr.String())
 	}
 	var response execResponse
 	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
-		return nil, fmt.Errorf("realy: invalid exec binding response: %w", err)
+		return nil, fmt.Errorf("relay: invalid exec binding response: %w", err)
 	}
 	if response.Error != "" {
-		return nil, fmt.Errorf("realy: exec binding: %s", response.Error)
+		return nil, fmt.Errorf("relay: exec binding: %s", response.Error)
 	}
 	return response.Output, nil
 }
@@ -74,7 +74,7 @@ type limitedWriter struct {
 
 func (w *limitedWriter) Write(value []byte) (int, error) {
 	if int64(len(value)) > w.remaining {
-		return 0, errors.New("realy: binding output limit exceeded")
+		return 0, errors.New("relay: binding output limit exceeded")
 	}
 	n, err := w.writer.Write(value)
 	w.remaining -= int64(n)

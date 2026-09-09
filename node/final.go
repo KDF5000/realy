@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/KDF5000/realy/controlplane"
+	"github.com/KDF5000/relay/controlplane"
 )
 
 func retryFinalReport(ctx context.Context, report func(context.Context) error) error {

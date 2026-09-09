@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/KDF5000/realy"
+	"github.com/KDF5000/relay"
 )
 
 type Bridge struct {
@@ -18,7 +18,7 @@ type Bridge struct {
 	Token    string
 }
 
-func Start(invoker realy.CapabilityInvoker) (*Bridge, error) {
+func Start(invoker relay.CapabilityInvoker) (*Bridge, error) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, err
@@ -35,7 +35,7 @@ func Start(invoker realy.CapabilityInvoker) (*Bridge, error) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		var call realy.CapabilityCall
+		var call relay.CapabilityCall
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<20)).Decode(&call); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return

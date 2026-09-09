@@ -7,22 +7,22 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/KDF5000/realy"
-	"github.com/KDF5000/realy/workspace"
+	"github.com/KDF5000/relay"
+	"github.com/KDF5000/relay/workspace"
 )
 
 func TestGitWorkspaceUsesMirrorAndCleansWorktree(t *testing.T) {
 	source := t.TempDir()
 	runGit(t, source, "init")
-	runGit(t, source, "config", "user.email", "realy@example.test")
-	runGit(t, source, "config", "user.name", "Realy Test")
+	runGit(t, source, "config", "user.email", "relay@example.test")
+	runGit(t, source, "config", "user.name", "Relay Test")
 	if err := os.WriteFile(filepath.Join(source, "README.md"), []byte("workspace\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	runGit(t, source, "add", "README.md")
 	runGit(t, source, "commit", "-m", "initial")
 	manager := &workspace.Manager{Root: t.TempDir()}
-	prepared, err := manager.Prepare(context.Background(), "run-1", "attempt-1", realy.WorkspaceSpec{Kind: "git", Source: source})
+	prepared, err := manager.Prepare(context.Background(), "run-1", "attempt-1", relay.WorkspaceSpec{Kind: "git", Source: source})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func TestGitWorkspaceUsesMirrorAndCleansWorktree(t *testing.T) {
 
 func TestWorkspaceRejectsEscapingSubdir(t *testing.T) {
 	manager := &workspace.Manager{Root: t.TempDir()}
-	_, err := manager.Prepare(context.Background(), "run", "attempt", realy.WorkspaceSpec{Kind: "temp", Subdir: "../escape"})
+	_, err := manager.Prepare(context.Background(), "run", "attempt", relay.WorkspaceSpec{Kind: "temp", Subdir: "../escape"})
 	if err == nil {
 		t.Fatal("escaping subdir was accepted")
 	}

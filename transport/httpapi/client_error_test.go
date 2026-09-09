@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/KDF5000/realy/controlplane"
-	"github.com/KDF5000/realy/transport/httpapi"
+	"github.com/KDF5000/relay/controlplane"
+	"github.com/KDF5000/relay/transport/httpapi"
 )
 
 func TestAuthenticationFailureIsNotAnExpiredLease(t *testing.T) {

@@ -3,7 +3,7 @@ package controlplane
 import (
 	"context"
 
-	"github.com/KDF5000/realy"
+	"github.com/KDF5000/relay"
 )
 
 type AccessKind string
@@ -26,7 +26,7 @@ func AccessFrom(ctx context.Context) (AccessScope, bool) {
 	value, ok := ctx.Value(accessKey{}).(AccessScope)
 	return value, ok
 }
-func authorizeRunScope(ctx context.Context, run realy.Run) error {
+func authorizeRunScope(ctx context.Context, run relay.Run) error {
 	scope, ok := AccessFrom(ctx)
 	if !ok || scope.Kind == AccessNode {
 		return nil

@@ -1,4 +1,4 @@
-// Package command adapts any non-interactive runtime CLI to Realy's Executor contract.
+// Package command adapts any non-interactive runtime CLI to Relay's Executor contract.
 package command
 
 import (
@@ -9,9 +9,9 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/KDF5000/realy"
-	runtimeprocess "github.com/KDF5000/realy/runtime/process"
-	"github.com/KDF5000/realy/runtime/toolbridge"
+	"github.com/KDF5000/relay"
+	runtimeprocess "github.com/KDF5000/relay/runtime/process"
+	"github.com/KDF5000/relay/runtime/toolbridge"
 )
 
 type Executor struct {
@@ -25,24 +25,24 @@ type input struct {
 	RunID        string                     `json:"run_id"`
 	AttemptID    string                     `json:"attempt_id"`
 	AgentID      string                     `json:"agent_id"`
-	Source       realy.Source               `json:"source"`
-	Input        realy.Input                `json:"input"`
-	Context      []realy.ContextItem        `json:"context,omitempty"`
-	Instructions realy.CompiledInstructions `json:"instructions"`
+	Source       relay.Source               `json:"source"`
+	Input        relay.Input                `json:"input"`
+	Context      []relay.ContextItem        `json:"context,omitempty"`
+	Instructions relay.CompiledInstructions `json:"instructions"`
 }
 
-func (e Executor) Execute(ctx context.Context, execution realy.Execution) (realy.Result, error) {
+func (e Executor) Execute(ctx context.Context, execution relay.Execution) (relay.Result, error) {
 	if e.Command == "" {
-		return realy.Result{}, fmt.Errorf("realy: runtime command is required")
+		return relay.Result{}, fmt.Errorf("relay: runtime command is required")
 	}
 	bridge, err := toolbridge.Start(execution.Capabilities)
 	if err != nil {
-		return realy.Result{}, fmt.Errorf("realy: start tool bridge: %w", err)
+		return relay.Result{}, fmt.Errorf("relay: start tool bridge: %w", err)
 	}
 	defer bridge.Close()
 	payload, err := json.Marshal(input{RunID: execution.RunID, AttemptID: execution.AttemptID, AgentID: execution.AgentID, Source: execution.Source, Input: execution.Input, Context: execution.Context, Instructions: execution.Instructions})
 	if err != nil {
-		return realy.Result{}, err
+		return relay.Result{}, err
 	}
 	cmd := exec.CommandContext(ctx, e.Command, e.Args...)
 	runtimeprocess.Configure(cmd)
@@ -54,16 +54,16 @@ func (e Executor) Execute(ctx context.Context, execution realy.Execution) (realy
 	for key, value := range e.Env {
 		cmd.Env = append(cmd.Env, key+"="+value)
 	}
-	cmd.Env = append(cmd.Env, "REALY_TOOL_URL="+bridge.URL(), "REALY_TOOL_TOKEN="+bridge.Token)
+	cmd.Env = append(cmd.Env, "RELAY_TOOL_URL="+bridge.URL(), "RELAY_TOOL_TOKEN="+bridge.Token)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return realy.Result{}, fmt.Errorf("realy: runtime command failed: %w: %s", err, stderr.String())
+		return relay.Result{}, fmt.Errorf("relay: runtime command failed: %w: %s", err, stderr.String())
 	}
-	var result realy.Result
+	var result relay.Result
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
-		return realy.Result{}, fmt.Errorf("realy: invalid runtime result: %w", err)
+		return relay.Result{}, fmt.Errorf("relay: invalid runtime result: %w", err)
 	}
 	return result, nil
 }

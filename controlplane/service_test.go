@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/KDF5000/realy"
-	"github.com/KDF5000/realy/controlplane"
+	"github.com/KDF5000/relay"
+	"github.com/KDF5000/relay/controlplane"
 )
 
 func TestSchedulerMatchesRuntimeLabelsAndCapabilities(t *testing.T) {
@@ -17,7 +17,7 @@ func TestSchedulerMatchesRuntimeLabelsAndCapabilities(t *testing.T) {
 	_, _ = service.RegisterNode(ctx, controlplane.NodeRegistration{ID: "wrong-runtime", Labels: map[string]string{"pool": "engineering"}, Runtimes: []controlplane.Runtime{{Provider: "claude"}}, Capabilities: []controlplane.Capability{{Name: "issue.read", Version: "1", Kind: "exec"}}, Capacity: 1})
 	_, _ = service.RegisterNode(ctx, controlplane.NodeRegistration{ID: "missing-tool", Labels: map[string]string{"pool": "engineering"}, Runtimes: []controlplane.Runtime{{Provider: "codex"}}, Capacity: 1})
 	_, _ = service.RegisterNode(ctx, controlplane.NodeRegistration{ID: "matching", Labels: map[string]string{"pool": "engineering"}, Runtimes: []controlplane.Runtime{{Provider: "codex"}}, Capabilities: []controlplane.Capability{{Name: "issue.read", Version: "1", Kind: "exec"}}, Capacity: 1})
-	run, err := service.Submit(ctx, realy.Request{AgentID: "agent", IdempotencyKey: "one", Runtime: realy.RuntimeRequirement{Provider: "codex", Labels: map[string]string{"pool": "engineering"}}, Input: realy.Input{Prompt: "work"}, Capabilities: []realy.CapabilityGrant{{Name: "issue.read", Version: "1"}}})
+	run, err := service.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "one", Runtime: relay.RuntimeRequirement{Provider: "codex", Labels: map[string]string{"pool": "engineering"}}, Input: relay.Input{Prompt: "work"}, Capabilities: []relay.CapabilityGrant{{Name: "issue.read", Version: "1"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,11 +37,11 @@ func TestSchedulerMatchesRuntimeLabelsAndCapabilities(t *testing.T) {
 	if err := service.Start(ctx, assignment); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.Complete(ctx, assignment, realy.Result{Summary: "done"}); err != nil {
+	if err := service.Complete(ctx, assignment, relay.Result{Summary: "done"}); err != nil {
 		t.Fatal(err)
 	}
 	completed, _ := service.GetRun(ctx, run.ID)
-	if completed.Status != realy.RunSucceeded || completed.Attempt.NodeID != "matching" {
+	if completed.Status != relay.RunSucceeded || completed.Attempt.NodeID != "matching" {
 		t.Fatalf("unexpected run: %#v", completed)
 	}
 	events, _ := service.Events(ctx, run.ID)
@@ -64,7 +64,7 @@ func TestSchedulerCanBindRunToRuntimeInstance(t *testing.T) {
 	if first.Runtimes[0].ID != "node-a/codex" || second.Runtimes[0].ID != "node-b/codex" {
 		t.Fatalf("runtime IDs were not normalized: %#v %#v", first.Runtimes, second.Runtimes)
 	}
-	_, err = service.Submit(ctx, realy.Request{AgentID: "bound-agent", IdempotencyKey: "bound-runtime", Runtime: realy.RuntimeRequirement{ID: "node-b/codex", Provider: "codex"}, Input: realy.Input{Prompt: "work"}})
+	_, err = service.Submit(ctx, relay.Request{AgentID: "bound-agent", IdempotencyKey: "bound-runtime", Runtime: relay.RuntimeRequirement{ID: "node-b/codex", Provider: "codex"}, Input: relay.Input{Prompt: "work"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestExpiredUnstartedLeaseReturnsToQueue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = service.Submit(ctx, realy.Request{AgentID: "agent", IdempotencyKey: "lease-expiry", Runtime: realy.RuntimeRequirement{Provider: "codex"}, Input: realy.Input{Prompt: "work"}})
+	_, err = service.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "lease-expiry", Runtime: relay.RuntimeRequirement{Provider: "codex"}, Input: relay.Input{Prompt: "work"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestCompletionAndFailureReportsAreContentIdempotent(t *testing.T) {
 		if _, err := service.RegisterNode(ctx, controlplane.NodeRegistration{ID: "node", Capacity: 1, Runtimes: []controlplane.Runtime{{Provider: "test"}}}); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := service.Submit(ctx, realy.Request{AgentID: "agent", IdempotencyKey: key, Runtime: realy.RuntimeRequirement{Provider: "test"}, Input: realy.Input{Prompt: "work"}}); err != nil {
+		if _, err := service.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: key, Runtime: relay.RuntimeRequirement{Provider: "test"}, Input: relay.Input{Prompt: "work"}}); err != nil {
 			t.Fatal(err)
 		}
 		assignment, err := service.Claim(ctx, "node")
@@ -128,14 +128,14 @@ func TestCompletionAndFailureReportsAreContentIdempotent(t *testing.T) {
 	}
 
 	successService, success := newAssignment("complete-idempotent")
-	result := realy.Result{Summary: "done", Output: json.RawMessage(`{"b":2,"a":1}`)}
+	result := relay.Result{Summary: "done", Output: json.RawMessage(`{"b":2,"a":1}`)}
 	if err := successService.Complete(ctx, success, result); err != nil {
 		t.Fatal(err)
 	}
-	if err := successService.Complete(ctx, success, realy.Result{Summary: "done", Output: json.RawMessage(`{ "a": 1, "b": 2 }`)}); err != nil {
+	if err := successService.Complete(ctx, success, relay.Result{Summary: "done", Output: json.RawMessage(`{ "a": 1, "b": 2 }`)}); err != nil {
 		t.Fatalf("identical completion rejected: %v", err)
 	}
-	if err := successService.Complete(ctx, success, realy.Result{Summary: "different"}); !errors.Is(err, controlplane.ErrInvalidTransition) {
+	if err := successService.Complete(ctx, success, relay.Result{Summary: "different"}); !errors.Is(err, controlplane.ErrInvalidTransition) {
 		t.Fatalf("different completion error=%v", err)
 	}
 	events, _ := successService.Events(ctx, success.RunID)
@@ -168,10 +168,10 @@ func TestRunningAttemptRecoveryCreatesNewAttemptAndFencesOldLease(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	run, err := service.Submit(ctx, realy.Request{
+	run, err := service.Submit(ctx, relay.Request{
 		AgentID: "agent", IdempotencyKey: "running-recovery",
-		Runtime: realy.RuntimeRequirement{Provider: "codex"}, Input: realy.Input{Prompt: "work"},
-		Retry: realy.RetryPolicy{MaxAttempts: 2, Backoff: "20ms"},
+		Runtime: relay.RuntimeRequirement{Provider: "codex"}, Input: relay.Input{Prompt: "work"},
+		Retry: relay.RetryPolicy{MaxAttempts: 2, Backoff: "20ms"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -191,10 +191,10 @@ func TestRunningAttemptRecoveryCreatesNewAttemptAndFencesOldLease(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if retried.Status != realy.RunQueued || retried.Attempt.Number != 2 || retried.Attempt.Status != realy.AttemptQueued {
+	if retried.Status != relay.RunQueued || retried.Attempt.Number != 2 || retried.Attempt.Status != relay.AttemptQueued {
 		t.Fatalf("unexpected recovered run: %+v", retried)
 	}
-	if err := service.Complete(ctx, first, realy.Result{Summary: "stale"}); !errors.Is(err, controlplane.ErrInvalidLease) {
+	if err := service.Complete(ctx, first, relay.Result{Summary: "stale"}); !errors.Is(err, controlplane.ErrInvalidLease) {
 		t.Fatalf("stale completion = %v, want invalid lease", err)
 	}
 	if _, err := service.Claim(ctx, "node"); !errors.Is(err, controlplane.ErrNoAssignment) {
@@ -214,7 +214,7 @@ func TestRunningAttemptWithoutRetryFailsAfterLeaseExpiry(t *testing.T) {
 	ctx := context.Background()
 	service := controlplane.New(5 * time.Millisecond)
 	_, _ = service.RegisterNode(ctx, controlplane.NodeRegistration{ID: "node", Runtimes: []controlplane.Runtime{{Provider: "codex"}}, Capacity: 1})
-	run, _ := service.Submit(ctx, realy.Request{AgentID: "agent", IdempotencyKey: "no-retry", Runtime: realy.RuntimeRequirement{Provider: "codex"}, Input: realy.Input{Prompt: "work"}})
+	run, _ := service.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "no-retry", Runtime: relay.RuntimeRequirement{Provider: "codex"}, Input: relay.Input{Prompt: "work"}})
 	assignment, _ := service.Claim(ctx, "node")
 	if err := service.Start(ctx, assignment); err != nil {
 		t.Fatal(err)
@@ -227,7 +227,7 @@ func TestRunningAttemptWithoutRetryFailsAfterLeaseExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if failed.Status != realy.RunFailed || failed.Attempt.Status != realy.AttemptLost {
+	if failed.Status != relay.RunFailed || failed.Attempt.Status != relay.AttemptLost {
 		t.Fatalf("unexpected exhausted run: %+v", failed)
 	}
 }
@@ -250,7 +250,7 @@ func TestNodeStateBecomesOfflineWithoutHeartbeat(t *testing.T) {
 func TestQueuedRunCancellationIsImmediateAndIdempotent(t *testing.T) {
 	ctx := context.Background()
 	service := controlplane.New(time.Second)
-	run, err := service.Submit(ctx, realy.Request{AgentID: "agent", IdempotencyKey: "cancel-queued", Runtime: realy.RuntimeRequirement{Provider: "codex"}, Input: realy.Input{Prompt: "work"}})
+	run, err := service.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "cancel-queued", Runtime: relay.RuntimeRequirement{Provider: "codex"}, Input: relay.Input{Prompt: "work"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,7 +259,7 @@ func TestQueuedRunCancellationIsImmediateAndIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cancelled.Status != realy.RunCancelled || cancelled.Attempt.Status != realy.AttemptCancelled || cancelled.CancelledAt == nil {
+	if cancelled.Status != relay.RunCancelled || cancelled.Attempt.Status != relay.AttemptCancelled || cancelled.CancelledAt == nil {
 		t.Fatalf("unexpected cancelled run: %+v", cancelled)
 	}
 	if _, err := service.CancelRun(ctx, run.ID, request); err != nil {
@@ -275,7 +275,7 @@ func TestRunningCancellationIsDeliveredByLeaseRenewal(t *testing.T) {
 	ctx := context.Background()
 	service := controlplane.New(time.Second)
 	_, _ = service.RegisterNode(ctx, controlplane.NodeRegistration{ID: "node", Runtimes: []controlplane.Runtime{{Provider: "codex"}}, Capacity: 1})
-	run, _ := service.Submit(ctx, realy.Request{AgentID: "agent", IdempotencyKey: "cancel-running", Runtime: realy.RuntimeRequirement{Provider: "codex"}, Input: realy.Input{Prompt: "work"}})
+	run, _ := service.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "cancel-running", Runtime: relay.RuntimeRequirement{Provider: "codex"}, Input: relay.Input{Prompt: "work"}})
 	assignment, _ := service.Claim(ctx, "node")
 	if err := service.Start(ctx, assignment); err != nil {
 		t.Fatal(err)
@@ -284,7 +284,7 @@ func TestRunningCancellationIsDeliveredByLeaseRenewal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pending.Status != realy.RunCancelling {
+	if pending.Status != relay.RunCancelling {
 		t.Fatalf("status = %s, want cancelling", pending.Status)
 	}
 	update, err := service.Renew(ctx, assignment)
@@ -294,14 +294,14 @@ func TestRunningCancellationIsDeliveredByLeaseRenewal(t *testing.T) {
 	if !update.CancelRequested || update.CancelReason != "stop" {
 		t.Fatalf("unexpected renewal directive: %+v", update)
 	}
-	if err := service.Complete(ctx, assignment, realy.Result{Summary: "stale"}); !errors.Is(err, controlplane.ErrRunCancelled) {
+	if err := service.Complete(ctx, assignment, relay.Result{Summary: "stale"}); !errors.Is(err, controlplane.ErrRunCancelled) {
 		t.Fatalf("completion during cancellation = %v", err)
 	}
 	if err := service.AcknowledgeCancellation(ctx, assignment); err != nil {
 		t.Fatal(err)
 	}
 	cancelled, _ := service.GetRun(ctx, run.ID)
-	if cancelled.Status != realy.RunCancelled || cancelled.Attempt.Status != realy.AttemptCancelled {
+	if cancelled.Status != relay.RunCancelled || cancelled.Attempt.Status != relay.AttemptCancelled {
 		t.Fatalf("unexpected acknowledged cancellation: %+v", cancelled)
 	}
 }
@@ -309,7 +309,7 @@ func TestRunningCancellationIsDeliveredByLeaseRenewal(t *testing.T) {
 func TestRunTimeoutUsesCancellationPath(t *testing.T) {
 	ctx := context.Background()
 	service := controlplane.New(time.Second)
-	run, err := service.Submit(ctx, realy.Request{AgentID: "agent", IdempotencyKey: "timeout", Runtime: realy.RuntimeRequirement{Provider: "codex"}, Input: realy.Input{Prompt: "work"}, Timeout: "5ms"})
+	run, err := service.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "timeout", Runtime: relay.RuntimeRequirement{Provider: "codex"}, Input: relay.Input{Prompt: "work"}, Timeout: "5ms"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -318,7 +318,7 @@ func TestRunTimeoutUsesCancellationPath(t *testing.T) {
 		t.Fatalf("reconcile timeout = %d, %v", processed, err)
 	}
 	cancelled, _ := service.GetRun(ctx, run.ID)
-	if cancelled.Status != realy.RunCancelled || cancelled.CancelReason != "run timeout exceeded" {
+	if cancelled.Status != relay.RunCancelled || cancelled.CancelReason != "run timeout exceeded" {
 		t.Fatalf("unexpected timeout result: %+v", cancelled)
 	}
 }

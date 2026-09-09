@@ -1,8 +1,8 @@
 const STORAGE = {
-  agents: "realy.playground.agents.v1",
-  sessions: "realy.playground.sessions.v1",
-  messages: "realy.playground.messages.v1",
-  selection: "realy.playground.selection.v1",
+  agents: "relay.playground.agents.v1",
+  sessions: "relay.playground.sessions.v1",
+  messages: "relay.playground.messages.v1",
+  selection: "relay.playground.selection.v1",
 };
 
 const state = {
@@ -368,7 +368,7 @@ function renderRoute() {
   });
   $("#management-topbar").classList.toggle("hidden", route === "chat");
   $("#breadcrumb-page").textContent = route === "agents" ? "Agents" : "Runtimes";
-  document.title = `${({chat:"对话", agents:"Agents", runtimes:"Runtimes"})[route]} · Realy`;
+  document.title = `${({chat:"对话", agents:"Agents", runtimes:"Runtimes"})[route]} · Relay`;
   document.querySelectorAll(".chat-only").forEach((item) => item.classList.toggle("hidden", route !== "chat"));
   elements.agentsView.classList.toggle("hidden", route !== "agents");
   elements.runtimesView.classList.toggle("hidden", route !== "runtimes");
@@ -450,7 +450,7 @@ function renderMessages() {
     $("#prompt-suggestions").classList.toggle("hidden", !currentAgent());
     if (currentAgent()) {
       title.textContent = `和 ${currentAgent().name} 开始工作`;
-      copy.textContent = "描述目标和约束，Realy 会把任务交给选定的 Runtime 执行。";
+      copy.textContent = "描述目标和约束，Relay 会把任务交给选定的 Runtime 执行。";
       button.classList.add("hidden");
     } else {
       title.textContent = "把任务交给你的 Agent";
@@ -826,7 +826,7 @@ function renderRuntimes() {
     const empty = document.createElement("div");
     empty.className = "details-placeholder";
     empty.style.marginTop = "0";
-    empty.textContent = "没有发现在线节点。请先启动 realy-node。";
+    empty.textContent = "没有发现在线节点。请先启动 relay-node。";
     elements.runtimeList.append(empty);
     return;
   }
@@ -1235,7 +1235,7 @@ function watchRun(runID, assistantMessage, session) {
     state.lastActivity = "Agent 正在工作";
     scheduleMessageUpdate(assistantMessage);
   };
-  source.addEventListener("realy.event", (message) => {
+  source.addEventListener("relay.event", (message) => {
     const event = JSON.parse(message.data);
     const isNew = !state.events.some((item) => item.id === event.id);
     if (isNew) {
@@ -1578,7 +1578,7 @@ function updateRegistrationPreview() {
   const config = {
     server: location.origin,
     node: { id: $("#register-node-id").value.trim() || "developer-node", capacity: Number($("#register-capacity").value) || 1, runtimes: [] },
-    runtimes: [{ id: `${$("#register-node-id").value.trim() || "developer-node"}/${provider}`, kind: provider, provider, protocol: "app-server", command, ...(defaultModel ? { model: defaultModel } : {}), ...(models.length ? { models } : {}), sandbox: "workspace-write", work_root: "/tmp/realy-runs", ephemeral: true }],
+    runtimes: [{ id: `${$("#register-node-id").value.trim() || "developer-node"}/${provider}`, kind: provider, provider, protocol: "app-server", command, ...(defaultModel ? { model: defaultModel } : {}), ...(models.length ? { models } : {}), sandbox: "workspace-write", work_root: "/tmp/relay-runs", ephemeral: true }],
   };
   $("#runtime-config-preview").textContent = JSON.stringify(config, null, 2);
 }

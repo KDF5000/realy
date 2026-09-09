@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS realy_capability_calls (
+CREATE TABLE IF NOT EXISTS relay_capability_calls (
     id TEXT PRIMARY KEY,
     run_id TEXT NOT NULL,
     attempt_id TEXT NOT NULL,

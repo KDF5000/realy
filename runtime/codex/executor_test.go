@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/KDF5000/realy"
-	runtimecodex "github.com/KDF5000/realy/runtime/codex"
+	"github.com/KDF5000/relay"
+	runtimecodex "github.com/KDF5000/relay/runtime/codex"
 )
 
 func TestExecutorUsesCodexExecJSONLAndFinalMessage(t *testing.T) {
@@ -17,7 +17,7 @@ func TestExecutorUsesCodexExecJSONLAndFinalMessage(t *testing.T) {
 	if err := os.MkdirAll(toolDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	tool := filepath.Join(toolDir, "realy-tool")
+	tool := filepath.Join(toolDir, "relay-tool")
 	if err := os.WriteFile(tool, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -31,11 +31,11 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 cat >/dev/null
-command -v realy-tool >/dev/null || exit 9
-[ -n "$REALY_TOOL_DIR" ] || exit 10
-[ -n "$REALY_TOOL_TOKEN" ] || exit 11
+command -v relay-tool >/dev/null || exit 9
+[ -n "$RELAY_TOOL_DIR" ] || exit 10
+[ -n "$RELAY_TOOL_TOKEN" ] || exit 11
 [ -z "$MULTICA_TOKEN" ] || exit 12
-[ "$REALY_TEST_ALLOWED" = "allowed" ] || exit 13
+[ "$RELAY_TEST_ALLOWED" = "allowed" ] || exit 13
 [ "$model" = "per-agent-model" ] || exit 14
 printf '%s\n' '{"type":"thread.started","thread_id":"thread-real"}'
 printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"done"}}'
@@ -46,9 +46,9 @@ printf '%s' 'Codex completed the real adapter contract' > "$out"
 	}
 	events := []string{}
 	t.Setenv("MULTICA_TOKEN", "must-not-reach-agent")
-	t.Setenv("REALY_TEST_ALLOWED", "allowed")
-	executor := runtimecodex.Executor{Config: runtimecodex.Config{Binary: fake, ToolDir: toolDir, PassEnv: []string{"REALY_TEST_ALLOWED"}, Model: "node-default", WorkRoot: dir, Ephemeral: true}}
-	result, err := executor.Execute(context.Background(), realy.Execution{RunID: "run-1", AgentID: "agent", Runtime: realy.RuntimeRequirement{Provider: "codex", Model: "per-agent-model"}, Input: realy.Input{Prompt: "do work"}, Instructions: realy.CompiledInstructions{Stable: "stable rules\n", Prompt: "do work\n"}, Capabilities: realy.NewCapabilityInvoker(realy.CapabilityInvokerOptions{}), Emit: func(_ context.Context, eventType string, _ any) { events = append(events, eventType) }})
+	t.Setenv("RELAY_TEST_ALLOWED", "allowed")
+	executor := runtimecodex.Executor{Config: runtimecodex.Config{Binary: fake, ToolDir: toolDir, PassEnv: []string{"RELAY_TEST_ALLOWED"}, Model: "node-default", WorkRoot: dir, Ephemeral: true}}
+	result, err := executor.Execute(context.Background(), relay.Execution{RunID: "run-1", AgentID: "agent", Runtime: relay.RuntimeRequirement{Provider: "codex", Model: "per-agent-model"}, Input: relay.Input{Prompt: "do work"}, Instructions: relay.CompiledInstructions{Stable: "stable rules\n", Prompt: "do work\n"}, Capabilities: relay.NewCapabilityInvoker(relay.CapabilityInvokerOptions{}), Emit: func(_ context.Context, eventType string, _ any) { events = append(events, eventType) }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ printf '%s' 'Codex completed the real adapter contract' > "$out"
 
 func TestDangerousSandboxRequiresExplicitOptIn(t *testing.T) {
 	executor := runtimecodex.Executor{Config: runtimecodex.Config{Sandbox: "danger-full-access"}}
-	_, err := executor.Execute(context.Background(), realy.Execution{})
+	_, err := executor.Execute(context.Background(), relay.Execution{})
 	if err == nil || !strings.Contains(err.Error(), "explicit") {
 		t.Fatalf("expected safety error, got %v", err)
 	}
@@ -119,7 +119,7 @@ printf '%s\n' '{"method":"turn/completed","params":{"threadId":"thread-stream","
 	}
 	var deltas []string
 	executor := runtimecodex.Executor{Config: runtimecodex.Config{Binary: fake, Protocol: "app-server", WorkRoot: dir, Ephemeral: true}}
-	result, err := executor.Execute(context.Background(), realy.Execution{RunID: "run-stream", Instructions: realy.CompiledInstructions{Stable: "rules", Prompt: "say hello"}, Capabilities: realy.NewCapabilityInvoker(realy.CapabilityInvokerOptions{}), Emit: func(_ context.Context, event string, data any) {
+	result, err := executor.Execute(context.Background(), relay.Execution{RunID: "run-stream", Instructions: relay.CompiledInstructions{Stable: "rules", Prompt: "say hello"}, Capabilities: relay.NewCapabilityInvoker(relay.CapabilityInvokerOptions{}), Emit: func(_ context.Context, event string, data any) {
 		if event == "assistant.message.delta" {
 			value := data.(map[string]string)
 			deltas = append(deltas, value["delta"])
@@ -152,7 +152,7 @@ printf '%s\n' '{"method":"item/agentMessage/delta","params":{"delta":"partial ou
 	}
 	var partial string
 	executor := runtimecodex.Executor{Config: runtimecodex.Config{Binary: fake, Protocol: "app-server", WorkRoot: dir, Ephemeral: true}}
-	_, err := executor.Execute(context.Background(), realy.Execution{RunID: "run-partial", Instructions: realy.CompiledInstructions{Prompt: "work"}, Capabilities: realy.NewCapabilityInvoker(realy.CapabilityInvokerOptions{}), Emit: func(_ context.Context, event string, data any) {
+	_, err := executor.Execute(context.Background(), relay.Execution{RunID: "run-partial", Instructions: relay.CompiledInstructions{Prompt: "work"}, Capabilities: relay.NewCapabilityInvoker(relay.CapabilityInvokerOptions{}), Emit: func(_ context.Context, event string, data any) {
 		if event == "assistant.message.delta" {
 			partial += data.(map[string]string)["delta"]
 		}

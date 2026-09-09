@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/KDF5000/realy"
+	"github.com/KDF5000/relay"
 )
 
 type HTTPProvider struct {
@@ -18,7 +18,7 @@ type HTTPProvider struct {
 	Client   *http.Client
 }
 
-func (p HTTPProvider) Invoke(ctx context.Context, request realy.CapabilityRequest) (json.RawMessage, error) {
+func (p HTTPProvider) Invoke(ctx context.Context, request relay.CapabilityRequest) (json.RawMessage, error) {
 	body, err := json.Marshal(request)
 	if err != nil {
 		return nil, err
@@ -45,17 +45,17 @@ func (p HTTPProvider) Invoke(ctx context.Context, request realy.CapabilityReques
 		return nil, err
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, fmt.Errorf("realy: HTTP binding returned %s: %s", response.Status, responseBody)
+		return nil, fmt.Errorf("relay: HTTP binding returned %s: %s", response.Status, responseBody)
 	}
 	var envelope struct {
 		Output json.RawMessage `json:"output"`
 		Error  string          `json:"error,omitempty"`
 	}
 	if err := json.Unmarshal(responseBody, &envelope); err != nil {
-		return nil, fmt.Errorf("realy: invalid HTTP binding response: %w", err)
+		return nil, fmt.Errorf("relay: invalid HTTP binding response: %w", err)
 	}
 	if envelope.Error != "" {
-		return nil, fmt.Errorf("realy: HTTP binding: %s", envelope.Error)
+		return nil, fmt.Errorf("relay: HTTP binding: %s", envelope.Error)
 	}
 	return envelope.Output, nil
 }

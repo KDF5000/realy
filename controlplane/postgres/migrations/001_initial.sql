@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS realy_nodes (
+CREATE TABLE IF NOT EXISTS relay_nodes (
     id TEXT PRIMARY KEY,
     labels JSONB NOT NULL DEFAULT '{}'::jsonb,
     runtimes JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS realy_nodes (
     last_seen TIMESTAMPTZ NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS realy_runs (
+CREATE TABLE IF NOT EXISTS relay_runs (
     id TEXT PRIMARY KEY,
     agent_id TEXT NOT NULL,
     idempotency_key TEXT NOT NULL UNIQUE,
@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS realy_runs (
     completed_at TIMESTAMPTZ
 );
 
-CREATE TABLE IF NOT EXISTS realy_attempts (
+CREATE TABLE IF NOT EXISTS relay_attempts (
     id TEXT PRIMARY KEY,
     run_id TEXT NOT NULL UNIQUE,
     number INTEGER NOT NULL,
@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS realy_attempts (
     completed_at TIMESTAMPTZ
 );
 
-CREATE TABLE IF NOT EXISTS realy_events (
+CREATE TABLE IF NOT EXISTS relay_events (
     id TEXT PRIMARY KEY,
     run_id TEXT NOT NULL,
     attempt_id TEXT NOT NULL,
@@ -45,10 +45,10 @@ CREATE TABLE IF NOT EXISTS realy_events (
     UNIQUE (run_id, sequence)
 );
 
-CREATE INDEX IF NOT EXISTS realy_runs_queue_idx
-    ON realy_runs (created_at, id)
+CREATE INDEX IF NOT EXISTS relay_runs_queue_idx
+    ON relay_runs (created_at, id)
     WHERE status = 'queued';
 
-CREATE INDEX IF NOT EXISTS realy_attempts_node_active_idx
-    ON realy_attempts (node_id, status)
+CREATE INDEX IF NOT EXISTS relay_attempts_node_active_idx
+    ON relay_attempts (node_id, status)
     WHERE status IN ('leased', 'running');

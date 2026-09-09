@@ -14,11 +14,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/KDF5000/realy"
-	"github.com/KDF5000/realy/controlplane"
+	"github.com/KDF5000/relay"
+	"github.com/KDF5000/relay/controlplane"
 )
 
-var ErrEventStreamInterrupted = errors.New("realy HTTP: event stream ended before a terminal event")
+var ErrEventStreamInterrupted = errors.New("relay HTTP: event stream ended before a terminal event")
 
 type Client struct {
 	BaseURL string
@@ -41,53 +41,53 @@ func NewClient(baseURL string) *Client {
 	return &Client{BaseURL: strings.TrimRight(baseURL, "/"), HTTP: &http.Client{Timeout: 30 * time.Second}}
 }
 
-func (c *Client) Submit(ctx context.Context, request realy.Request) (realy.Run, error) {
-	var out realy.Run
+func (c *Client) Submit(ctx context.Context, request relay.Request) (relay.Run, error) {
+	var out relay.Run
 	err := c.do(ctx, http.MethodPost, "/v1/runs", request, &out)
 	return out, err
 }
-func (c *Client) GetRun(ctx context.Context, runID string) (realy.Run, error) {
-	var out realy.Run
+func (c *Client) GetRun(ctx context.Context, runID string) (relay.Run, error) {
+	var out relay.Run
 	err := c.do(ctx, http.MethodGet, "/v1/runs/"+url.PathEscape(runID), nil, &out)
 	return out, err
 }
-func (c *Client) ListRuns(ctx context.Context, limit int) ([]realy.Run, error) {
-	var out []realy.Run
+func (c *Client) ListRuns(ctx context.Context, limit int) ([]relay.Run, error) {
+	var out []relay.Run
 	err := c.do(ctx, http.MethodGet, "/v1/runs?limit="+strconv.Itoa(limit), nil, &out)
 	return out, err
 }
-func (c *Client) SessionRuns(ctx context.Context, sessionID string, limit int) ([]realy.Run, error) {
-	var out []realy.Run
+func (c *Client) SessionRuns(ctx context.Context, sessionID string, limit int) ([]relay.Run, error) {
+	var out []relay.Run
 	err := c.do(ctx, http.MethodGet, "/v1/sessions/"+url.PathEscape(sessionID)+"/runs?limit="+strconv.Itoa(limit), nil, &out)
 	return out, err
 }
-func (c *Client) Attempts(ctx context.Context, runID string) ([]realy.Attempt, error) {
-	var out []realy.Attempt
+func (c *Client) Attempts(ctx context.Context, runID string) ([]relay.Attempt, error) {
+	var out []relay.Attempt
 	err := c.do(ctx, http.MethodGet, "/v1/runs/"+url.PathEscape(runID)+"/attempts", nil, &out)
 	return out, err
 }
-func (c *Client) Interactions(ctx context.Context, runID string) ([]realy.Interaction, error) {
-	var out []realy.Interaction
+func (c *Client) Interactions(ctx context.Context, runID string) ([]relay.Interaction, error) {
+	var out []relay.Interaction
 	err := c.do(ctx, http.MethodGet, "/v1/runs/"+url.PathEscape(runID)+"/interactions", nil, &out)
 	return out, err
 }
-func (c *Client) ResolveInteraction(ctx context.Context, id string, response json.RawMessage) (realy.Interaction, error) {
-	var out realy.Interaction
+func (c *Client) ResolveInteraction(ctx context.Context, id string, response json.RawMessage) (relay.Interaction, error) {
+	var out relay.Interaction
 	err := c.do(ctx, http.MethodPost, "/v1/interactions/"+url.PathEscape(id)+"/resolve", map[string]any{"response": response}, &out)
 	return out, err
 }
-func (c *Client) CreateInteraction(ctx context.Context, a controlplane.Assignment, request realy.InteractionRequest) (realy.Interaction, error) {
-	var out realy.Interaction
+func (c *Client) CreateInteraction(ctx context.Context, a controlplane.Assignment, request relay.InteractionRequest) (relay.Interaction, error) {
+	var out relay.Interaction
 	err := c.do(ctx, http.MethodPost, "/v1/attempts/"+url.PathEscape(a.AttemptID)+"/interactions", map[string]any{"assignment": a, "request": request}, &out)
 	return out, err
 }
-func (c *Client) GetInteraction(ctx context.Context, a controlplane.Assignment, id string) (realy.Interaction, error) {
+func (c *Client) GetInteraction(ctx context.Context, a controlplane.Assignment, id string) (relay.Interaction, error) {
 	path := "/v1/attempts/" + url.PathEscape(a.AttemptID) + "/interactions/" + url.PathEscape(id) + "?run_id=" + url.QueryEscape(a.RunID)
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+path, nil)
 	if err != nil {
-		return realy.Interaction{}, err
+		return relay.Interaction{}, err
 	}
-	request.Header.Set("X-Realy-Lease-Token", a.LeaseToken)
+	request.Header.Set("X-Relay-Lease-Token", a.LeaseToken)
 	c.authorize(request)
 	client := c.HTTP
 	if client == nil {
@@ -95,24 +95,24 @@ func (c *Client) GetInteraction(ctx context.Context, a controlplane.Assignment, 
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		return realy.Interaction{}, err
+		return relay.Interaction{}, err
 	}
 	defer response.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(response.Body, 8<<20))
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return realy.Interaction{}, fmt.Errorf("realy HTTP %s: %s", response.Status, strings.TrimSpace(string(body)))
+		return relay.Interaction{}, fmt.Errorf("relay HTTP %s: %s", response.Status, strings.TrimSpace(string(body)))
 	}
-	var out realy.Interaction
+	var out relay.Interaction
 	err = json.Unmarshal(body, &out)
 	return out, err
 }
-func (c *Client) Events(ctx context.Context, runID string) ([]realy.Event, error) {
-	var out []realy.Event
+func (c *Client) Events(ctx context.Context, runID string) ([]relay.Event, error) {
+	var out []relay.Event
 	err := c.do(ctx, http.MethodGet, "/v1/runs/"+url.PathEscape(runID)+"/events", nil, &out)
 	return out, err
 }
-func (c *Client) Artifacts(ctx context.Context, runID string) ([]realy.Artifact, error) {
-	var out []realy.Artifact
+func (c *Client) Artifacts(ctx context.Context, runID string) ([]relay.Artifact, error) {
+	var out []relay.Artifact
 	err := c.do(ctx, http.MethodGet, "/v1/runs/"+url.PathEscape(runID)+"/artifacts", nil, &out)
 	return out, err
 }
@@ -133,18 +133,18 @@ func (c *Client) OpenArtifact(ctx context.Context, artifactID string) (io.ReadCl
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		defer response.Body.Close()
 		body, _ := io.ReadAll(io.LimitReader(response.Body, 8<<20))
-		return nil, fmt.Errorf("realy HTTP %s: %s", response.Status, strings.TrimSpace(string(body)))
+		return nil, fmt.Errorf("relay HTTP %s: %s", response.Status, strings.TrimSpace(string(body)))
 	}
 	return response.Body, nil
 }
-func (c *Client) UploadArtifact(ctx context.Context, assignment controlplane.Assignment, artifact realy.Artifact, reader io.Reader) (realy.Artifact, error) {
+func (c *Client) UploadArtifact(ctx context.Context, assignment controlplane.Assignment, artifact relay.Artifact, reader io.Reader) (relay.Artifact, error) {
 	query := url.Values{"run_id": {assignment.RunID}, "type": {artifact.Type}, "name": {artifact.Name}}
 	path := "/v1/attempts/" + url.PathEscape(assignment.AttemptID) + "/artifacts?" + query.Encode()
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+path, reader)
 	if err != nil {
-		return realy.Artifact{}, err
+		return relay.Artifact{}, err
 	}
-	request.Header.Set("X-Realy-Lease-Token", assignment.LeaseToken)
+	request.Header.Set("X-Relay-Lease-Token", assignment.LeaseToken)
 	c.authorize(request)
 	if artifact.ContentType != "" {
 		request.Header.Set("Content-Type", artifact.ContentType)
@@ -155,31 +155,31 @@ func (c *Client) UploadArtifact(ctx context.Context, assignment controlplane.Ass
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		return realy.Artifact{}, err
+		return relay.Artifact{}, err
 	}
 	defer response.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(response.Body, 8<<20))
 	if err != nil {
-		return realy.Artifact{}, err
+		return relay.Artifact{}, err
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return realy.Artifact{}, fmt.Errorf("realy HTTP %s: %s", response.Status, strings.TrimSpace(string(body)))
+		return relay.Artifact{}, fmt.Errorf("relay HTTP %s: %s", response.Status, strings.TrimSpace(string(body)))
 	}
-	var out realy.Artifact
+	var out relay.Artifact
 	if err := json.Unmarshal(body, &out); err != nil {
-		return realy.Artifact{}, err
+		return relay.Artifact{}, err
 	}
 	return out, nil
 }
-func (c *Client) ReserveCapability(ctx context.Context, a controlplane.Assignment, key, hash string, request realy.CapabilityRequest) (realy.CapabilityReservation, error) {
-	var out realy.CapabilityReservation
+func (c *Client) ReserveCapability(ctx context.Context, a controlplane.Assignment, key, hash string, request relay.CapabilityRequest) (relay.CapabilityReservation, error) {
+	var out relay.CapabilityReservation
 	err := c.do(ctx, http.MethodPost, "/v1/attempts/"+url.PathEscape(a.AttemptID)+"/capability-calls/reserve", map[string]any{"assignment": a, "idempotency_key": key, "request_hash": hash, "request": request}, &out)
 	return out, err
 }
-func (c *Client) FinishCapability(ctx context.Context, a controlplane.Assignment, reservation realy.CapabilityReservation, result realy.CapabilityResult, cause string) error {
+func (c *Client) FinishCapability(ctx context.Context, a controlplane.Assignment, reservation relay.CapabilityReservation, result relay.CapabilityResult, cause string) error {
 	return c.do(ctx, http.MethodPost, "/v1/attempts/"+url.PathEscape(a.AttemptID)+"/capability-calls/"+url.PathEscape(reservation.CallID)+"/finish", map[string]any{"assignment": a, "reservation": reservation, "result": result, "error": cause}, nil)
 }
-func (c *Client) StreamEvents(ctx context.Context, runID string, after int, handle func(realy.Event) error) error {
+func (c *Client) StreamEvents(ctx context.Context, runID string, after int, handle func(relay.Event) error) error {
 	path := "/v1/runs/" + url.PathEscape(runID) + "/events/stream?after=" + strconv.Itoa(after)
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+path, nil)
 	if err != nil {
@@ -209,7 +209,7 @@ func (c *Client) StreamEvents(ctx context.Context, runID string, after int, hand
 		if response.StatusCode == http.StatusNotFound {
 			return fmt.Errorf("%w: %s", controlplane.ErrNotFound, strings.TrimSpace(string(body)))
 		}
-		return fmt.Errorf("realy HTTP %s: %s", response.Status, strings.TrimSpace(string(body)))
+		return fmt.Errorf("relay HTTP %s: %s", response.Status, strings.TrimSpace(string(body)))
 	}
 	scanner := bufio.NewScanner(response.Body)
 	scanner.Buffer(make([]byte, 64<<10), 2<<20)
@@ -221,9 +221,9 @@ func (c *Client) StreamEvents(ctx context.Context, runID string, after int, hand
 			if data.Len() == 0 {
 				continue
 			}
-			var event realy.Event
+			var event relay.Event
 			if err := json.Unmarshal(data.Bytes(), &event); err != nil {
-				return fmt.Errorf("decode Realy event stream: %w", err)
+				return fmt.Errorf("decode Relay event stream: %w", err)
 			}
 			data.Reset()
 			if event.Sequence > after {
@@ -250,8 +250,8 @@ func (c *Client) StreamEvents(ctx context.Context, runID string, after int, hand
 	}
 	return nil
 }
-func (c *Client) CancelRun(ctx context.Context, runID string, request controlplane.CancelRequest) (realy.Run, error) {
-	var out realy.Run
+func (c *Client) CancelRun(ctx context.Context, runID string, request controlplane.CancelRequest) (relay.Run, error) {
+	var out relay.Run
 	err := c.do(ctx, http.MethodPost, "/v1/runs/"+url.PathEscape(runID)+"/cancel", request, &out)
 	return out, err
 }
@@ -290,7 +290,7 @@ func (c *Client) AppendEvent(ctx context.Context, runID, attemptID, lease, event
 	}
 	return c.do(ctx, http.MethodPost, "/v1/attempts/"+url.PathEscape(attemptID)+"/events", map[string]any{"run_id": runID, "lease_token": lease, "type": eventType, "data": data, "event_id": id}, nil)
 }
-func (c *Client) Complete(ctx context.Context, value controlplane.Assignment, result realy.Result) error {
+func (c *Client) Complete(ctx context.Context, value controlplane.Assignment, result relay.Result) error {
 	return c.do(ctx, http.MethodPost, "/v1/attempts/"+url.PathEscape(value.AttemptID)+"/complete", map[string]any{"assignment": value, "result": result}, nil)
 }
 func (c *Client) Fail(ctx context.Context, value controlplane.Assignment, cause string) error {
@@ -367,13 +367,13 @@ func (c *Client) do(ctx context.Context, method, path string, input, output any)
 		if protocolErr != nil {
 			return fmt.Errorf("%w: %s", protocolErr, message)
 		}
-		return fmt.Errorf("realy HTTP %s: %s", response.Status, message)
+		return fmt.Errorf("relay HTTP %s: %s", response.Status, message)
 	}
 	if output == nil || len(responseBody) == 0 {
 		return nil
 	}
 	if err := json.Unmarshal(responseBody, output); err != nil {
-		return fmt.Errorf("decode Realy response: %w", err)
+		return fmt.Errorf("decode Relay response: %w", err)
 	}
 	return nil
 }

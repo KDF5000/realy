@@ -14,7 +14,7 @@ type FileBlobStore struct{ Root string }
 
 func NewFileBlobStore(root string) (*FileBlobStore, error) {
 	if strings.TrimSpace(root) == "" {
-		return nil, errors.New("realy blob: root is required")
+		return nil, errors.New("relay blob: root is required")
 	}
 	root, err := filepath.Abs(root)
 	if err != nil {
@@ -28,7 +28,7 @@ func NewFileBlobStore(root string) (*FileBlobStore, error) {
 
 func (s *FileBlobStore) path(key string) (string, error) {
 	if key == "" || strings.ContainsAny(key, `/\\`) || key == "." || key == ".." {
-		return "", errors.New("realy blob: invalid key")
+		return "", errors.New("relay blob: invalid key")
 	}
 	return filepath.Join(s.Root, key), nil
 }

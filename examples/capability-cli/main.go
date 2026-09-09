@@ -1,4 +1,4 @@
-// Command realy-example-capability demonstrates the protocol implemented by a
+// Command relay-example-capability demonstrates the protocol implemented by a
 // user-owned CLI capability binding.
 package main
 
@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/KDF5000/realy"
+	"github.com/KDF5000/relay"
 )
 
 func main() {
-	var request realy.CapabilityRequest
+	var request relay.CapabilityRequest
 	if err := json.NewDecoder(os.Stdin).Decode(&request); err != nil {
 		fail("decode request: %v", err)
 	}

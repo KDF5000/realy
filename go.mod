@@ -1,4 +1,4 @@
-module github.com/KDF5000/realy
+module github.com/KDF5000/relay
 
 go 1.26
 

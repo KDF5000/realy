@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/KDF5000/realy"
-	"github.com/KDF5000/realy/controlplane"
+	"github.com/KDF5000/relay"
+	"github.com/KDF5000/relay/controlplane"
 )
 
 type Handler struct {
@@ -88,7 +88,7 @@ func (h *Handler) consoleSession(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	http.SetCookie(w, &http.Cookie{Name: "realy_host_token", Value: value.Token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: r.TLS != nil, MaxAge: 86400})
+	http.SetCookie(w, &http.Cookie{Name: "relay_host_token", Value: value.Token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: r.TLS != nil, MaxAge: 86400})
 	w.WriteHeader(http.StatusNoContent)
 }
 func (h *Handler) listRuns(w http.ResponseWriter, r *http.Request) {
@@ -122,7 +122,7 @@ func (h *Handler) resolveInteraction(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) createInteraction(w http.ResponseWriter, r *http.Request) {
 	var value struct {
 		Assignment controlplane.Assignment  `json:"assignment"`
-		Request    realy.InteractionRequest `json:"request"`
+		Request    relay.InteractionRequest `json:"request"`
 	}
 	if !decode(w, r, &value) {
 		return
@@ -135,7 +135,7 @@ func (h *Handler) createInteraction(w http.ResponseWriter, r *http.Request) {
 	respond(w, http.StatusCreated, result, err)
 }
 func (h *Handler) getInteraction(w http.ResponseWriter, r *http.Request) {
-	a := controlplane.Assignment{RunID: r.URL.Query().Get("run_id"), AttemptID: r.PathValue("attemptID"), LeaseToken: r.Header.Get("X-Realy-Lease-Token")}
+	a := controlplane.Assignment{RunID: r.URL.Query().Get("run_id"), AttemptID: r.PathValue("attemptID"), LeaseToken: r.Header.Get("X-Relay-Lease-Token")}
 	result, err := h.service.GetInteraction(r.Context(), a, r.PathValue("interactionID"))
 	respond(w, http.StatusOK, result, err)
 }
@@ -162,7 +162,7 @@ func (h *Handler) downloadArtifact(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.Copy(w, reader)
 }
 func (h *Handler) submit(w http.ResponseWriter, r *http.Request) {
-	var value realy.Request
+	var value relay.Request
 	if !decode(w, r, &value) {
 		return
 	}
@@ -206,7 +206,7 @@ func (h *Handler) streamEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
-	writeEvents := func(values []realy.Event) error {
+	writeEvents := func(values []relay.Event) error {
 		for _, event := range values {
 			if event.Sequence <= after {
 				continue
@@ -215,7 +215,7 @@ func (h *Handler) streamEvents(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return err
 			}
-			if _, err := fmt.Fprintf(w, "id: %d\nevent: realy.event\ndata: %s\n\n", event.Sequence, encoded); err != nil {
+			if _, err := fmt.Fprintf(w, "id: %d\nevent: relay.event\ndata: %s\n\n", event.Sequence, encoded); err != nil {
 				return err
 			}
 			after = event.Sequence
@@ -259,8 +259,8 @@ func (h *Handler) streamEvents(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func streamTerminal(status realy.RunStatus) bool {
-	return status == realy.RunSucceeded || status == realy.RunFailed || status == realy.RunCancelled
+func streamTerminal(status relay.RunStatus) bool {
+	return status == relay.RunSucceeded || status == relay.RunFailed || status == relay.RunCancelled
 }
 func (h *Handler) cancelRun(w http.ResponseWriter, r *http.Request) {
 	var value controlplane.CancelRequest
@@ -336,8 +336,8 @@ func (h *Handler) appendEvent(w http.ResponseWriter, r *http.Request) {
 	respondEmpty(w, h.service.AppendEvent(r.Context(), value.RunID, r.PathValue("attemptID"), value.LeaseToken, value.Type, value.Data, value.EventID))
 }
 func (h *Handler) uploadArtifact(w http.ResponseWriter, r *http.Request) {
-	assignment := controlplane.Assignment{RunID: r.URL.Query().Get("run_id"), AttemptID: r.PathValue("attemptID"), LeaseToken: r.Header.Get("X-Realy-Lease-Token")}
-	artifact := realy.Artifact{Type: r.URL.Query().Get("type"), Name: r.URL.Query().Get("name"), ContentType: r.Header.Get("Content-Type")}
+	assignment := controlplane.Assignment{RunID: r.URL.Query().Get("run_id"), AttemptID: r.PathValue("attemptID"), LeaseToken: r.Header.Get("X-Relay-Lease-Token")}
+	artifact := relay.Artifact{Type: r.URL.Query().Get("type"), Name: r.URL.Query().Get("name"), ContentType: r.Header.Get("Content-Type")}
 	if assignment.RunID == "" || assignment.LeaseToken == "" || artifact.Type == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "run_id, lease token, and artifact type are required"})
 		return
@@ -351,7 +351,7 @@ func (h *Handler) reserveCapability(w http.ResponseWriter, r *http.Request) {
 		Assignment controlplane.Assignment `json:"assignment"`
 		Key        string                  `json:"idempotency_key"`
 		Hash       string                  `json:"request_hash"`
-		Request    realy.CapabilityRequest `json:"request"`
+		Request    relay.CapabilityRequest `json:"request"`
 	}
 	if !decode(w, r, &value) {
 		return
@@ -366,8 +366,8 @@ func (h *Handler) reserveCapability(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) finishCapability(w http.ResponseWriter, r *http.Request) {
 	var value struct {
 		Assignment  controlplane.Assignment     `json:"assignment"`
-		Reservation realy.CapabilityReservation `json:"reservation"`
-		Result      realy.CapabilityResult      `json:"result"`
+		Reservation relay.CapabilityReservation `json:"reservation"`
+		Result      relay.CapabilityResult      `json:"result"`
 		Error       string                      `json:"error,omitempty"`
 	}
 	if !decode(w, r, &value) {
@@ -382,7 +382,7 @@ func (h *Handler) finishCapability(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) complete(w http.ResponseWriter, r *http.Request) {
 	var value struct {
 		Assignment controlplane.Assignment `json:"assignment"`
-		Result     realy.Result            `json:"result"`
+		Result     relay.Result            `json:"result"`
 	}
 	if !decode(w, r, &value) {
 		return

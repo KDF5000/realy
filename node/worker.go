@@ -10,13 +10,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/KDF5000/realy"
-	"github.com/KDF5000/realy/binding"
-	"github.com/KDF5000/realy/controlplane"
-	"github.com/KDF5000/realy/workspace"
+	"github.com/KDF5000/relay"
+	"github.com/KDF5000/relay/binding"
+	"github.com/KDF5000/relay/controlplane"
+	"github.com/KDF5000/relay/workspace"
 )
 
-var ErrLeaseLost = errors.New("realy node: assignment lease lost")
+var ErrLeaseLost = errors.New("relay node: assignment lease lost")
 
 type ControlPlane interface {
 	RegisterNode(context.Context, controlplane.NodeRegistration) (controlplane.Node, error)
@@ -25,23 +25,23 @@ type ControlPlane interface {
 	Start(context.Context, controlplane.Assignment) error
 	Renew(context.Context, controlplane.Assignment) (controlplane.LeaseUpdate, error)
 	AppendEvent(context.Context, string, string, string, string, any, ...string) error
-	Complete(context.Context, controlplane.Assignment, realy.Result) error
+	Complete(context.Context, controlplane.Assignment, relay.Result) error
 	Fail(context.Context, controlplane.Assignment, string) error
 	AcknowledgeCancellation(context.Context, controlplane.Assignment) error
-	UploadArtifact(context.Context, controlplane.Assignment, realy.Artifact, io.Reader) (realy.Artifact, error)
-	ReserveCapability(context.Context, controlplane.Assignment, string, string, realy.CapabilityRequest) (realy.CapabilityReservation, error)
-	FinishCapability(context.Context, controlplane.Assignment, realy.CapabilityReservation, realy.CapabilityResult, string) error
-	CreateInteraction(context.Context, controlplane.Assignment, realy.InteractionRequest) (realy.Interaction, error)
-	GetInteraction(context.Context, controlplane.Assignment, string) (realy.Interaction, error)
+	UploadArtifact(context.Context, controlplane.Assignment, relay.Artifact, io.Reader) (relay.Artifact, error)
+	ReserveCapability(context.Context, controlplane.Assignment, string, string, relay.CapabilityRequest) (relay.CapabilityReservation, error)
+	FinishCapability(context.Context, controlplane.Assignment, relay.CapabilityReservation, relay.CapabilityResult, string) error
+	CreateInteraction(context.Context, controlplane.Assignment, relay.InteractionRequest) (relay.Interaction, error)
+	GetInteraction(context.Context, controlplane.Assignment, string) (relay.Interaction, error)
 }
 
 type ExecutorResolver interface {
-	Resolve(provider string) (realy.Executor, bool)
+	Resolve(provider string) (relay.Executor, bool)
 }
 
-type ExecutorMap map[string]realy.Executor
+type ExecutorMap map[string]relay.Executor
 
-func (m ExecutorMap) Resolve(provider string) (realy.Executor, bool) {
+func (m ExecutorMap) Resolve(provider string) (relay.Executor, bool) {
 	executor, ok := m[provider]
 	return executor, ok
 }
@@ -51,7 +51,7 @@ type Worker struct {
 	ControlPlane ControlPlane
 	Bindings     *binding.Registry
 	Executors    ExecutorResolver
-	Compiler     realy.InstructionCompiler
+	Compiler     relay.InstructionCompiler
 	Workspaces   workspace.Provider
 	Outbox       *Outbox
 }
@@ -103,7 +103,7 @@ func (w *Worker) RunPool(claimCtx, executionCtx context.Context, poll time.Durat
 
 func (w *Worker) Register(ctx context.Context) (controlplane.Node, error) {
 	if w.ControlPlane == nil {
-		return controlplane.Node{}, errors.New("realy node: control plane is required")
+		return controlplane.Node{}, errors.New("relay node: control plane is required")
 	}
 	if w.Bindings != nil {
 		w.Registration.Capabilities = nil
@@ -114,19 +114,19 @@ func (w *Worker) Register(ctx context.Context) (controlplane.Node, error) {
 	return w.ControlPlane.RegisterNode(ctx, w.Registration)
 }
 
-func (w *Worker) RunOnce(ctx context.Context) (realy.Run, error) {
+func (w *Worker) RunOnce(ctx context.Context) (relay.Run, error) {
 	if w.ControlPlane == nil || w.Executors == nil {
-		return realy.Run{}, errors.New("realy node: control plane and executors are required")
+		return relay.Run{}, errors.New("relay node: control plane and executors are required")
 	}
 	assignment, err := w.ControlPlane.Claim(ctx, w.Registration.ID)
 	if err != nil {
-		return realy.Run{}, err
+		return relay.Run{}, err
 	}
 	executor, ok := w.Executors.Resolve(assignment.Request.Runtime.Provider)
 	if !ok {
 		cause := fmt.Sprintf("runtime provider %q is unavailable", assignment.Request.Runtime.Provider)
 		_ = w.ControlPlane.Fail(ctx, assignment, cause)
-		return realy.Run{}, errors.New(cause)
+		return relay.Run{}, errors.New(cause)
 	}
 	workDir := ""
 	cleanupWorkspace := func(context.Context) error { return nil }
@@ -134,12 +134,12 @@ func (w *Worker) RunOnce(ctx context.Context) (realy.Run, error) {
 		if w.Workspaces == nil {
 			cause := "workspace requested but no workspace provider is configured"
 			_ = w.ControlPlane.Fail(ctx, assignment, cause)
-			return realy.Run{}, errors.New(cause)
+			return relay.Run{}, errors.New(cause)
 		}
 		prepared, prepareErr := w.Workspaces.Prepare(ctx, assignment.RunID, assignment.AttemptID, assignment.Request.Workspace)
 		if prepareErr != nil {
 			_ = w.ControlPlane.Fail(ctx, assignment, prepareErr.Error())
-			return realy.Run{}, prepareErr
+			return relay.Run{}, prepareErr
 		}
 		workDir, cleanupWorkspace = prepared.Dir, prepared.Cleanup
 		defer func() {
@@ -150,25 +150,25 @@ func (w *Worker) RunOnce(ctx context.Context) (realy.Run, error) {
 	}
 	compiler := w.Compiler
 	if compiler == nil {
-		compiler = realy.DefaultInstructionCompiler{}
+		compiler = relay.DefaultInstructionCompiler{}
 	}
 	instructions := assignment.Request.Instructions
 	if len(assignment.Request.Capabilities) > 0 {
-		instructions.Runtime = append(append([]realy.InstructionFragment(nil), instructions.Runtime...), realy.CapabilityToolInstruction(assignment.Request.Capabilities))
+		instructions.Runtime = append(append([]relay.InstructionFragment(nil), instructions.Runtime...), relay.CapabilityToolInstruction(assignment.Request.Capabilities))
 	}
 	compiled, err := compiler.Compile(assignment.Request.Input, instructions)
 	if err != nil {
 		_ = w.ControlPlane.Fail(ctx, assignment, err.Error())
-		return realy.Run{}, err
+		return relay.Run{}, err
 	}
 	if err := w.ControlPlane.Start(ctx, assignment); err != nil {
 		if errors.Is(err, controlplane.ErrRunCancelled) {
 			if ackErr := w.ControlPlane.AcknowledgeCancellation(ctx, assignment); ackErr != nil {
-				return realy.Run{}, ackErr
+				return relay.Run{}, ackErr
 			}
 			return cancelledRun(assignment), nil
 		}
-		return realy.Run{}, err
+		return relay.Run{}, err
 	}
 	executionCtx, cancelExecution := context.WithCancel(ctx)
 	defer cancelExecution()
@@ -177,8 +177,8 @@ func (w *Worker) RunOnce(ctx context.Context) (realy.Run, error) {
 	go func() {
 		keeperDone <- w.keepLease(keeperCtx, assignment, cancelExecution)
 	}()
-	run := realy.Run{ID: assignment.RunID, AgentID: assignment.Request.AgentID, Runtime: assignment.Request.Runtime, Source: assignment.Request.Source, Attempt: realy.Attempt{ID: assignment.AttemptID, NodeID: w.Registration.ID}}
-	provider := realy.CapabilityProvider(nil)
+	run := relay.Run{ID: assignment.RunID, AgentID: assignment.Request.AgentID, Runtime: assignment.Request.Runtime, Source: assignment.Request.Source, Attempt: relay.Attempt{ID: assignment.AttemptID, NodeID: w.Registration.ID}}
+	provider := relay.CapabilityProvider(nil)
 	if w.Bindings != nil {
 		provider = w.Bindings
 	}
@@ -199,21 +199,21 @@ func (w *Worker) RunOnce(ctx context.Context) (realy.Run, error) {
 			deliver = w.Outbox.deliver
 		}
 		if err := deliver(eventCtx, w.ControlPlane, assignment, fmt.Sprint(eventSequence), eventType, data); err != nil {
-			eventErr = fmt.Errorf("realy node: deliver event %s: %w", eventType, err)
+			eventErr = fmt.Errorf("relay node: deliver event %s: %w", eventType, err)
 			cancelExecution()
 		}
 	}
-	invoker := realy.NewCapabilityInvoker(realy.CapabilityInvokerOptions{
+	invoker := relay.NewCapabilityInvoker(relay.CapabilityInvokerOptions{
 		Run: run, Principal: assignment.Request.Principal, Grants: assignment.Request.Capabilities, Provider: provider,
 		Emit: emit,
-		Reserve: func(callCtx context.Context, key, hash string, request realy.CapabilityRequest) (realy.CapabilityReservation, error) {
+		Reserve: func(callCtx context.Context, key, hash string, request relay.CapabilityRequest) (relay.CapabilityReservation, error) {
 			return w.ControlPlane.ReserveCapability(callCtx, assignment, key, hash, request)
 		},
-		Finish: func(callCtx context.Context, reservation realy.CapabilityReservation, result realy.CapabilityResult, cause string) error {
+		Finish: func(callCtx context.Context, reservation relay.CapabilityReservation, result relay.CapabilityResult, cause string) error {
 			return w.ControlPlane.FinishCapability(callCtx, assignment, reservation, result, cause)
 		},
 	})
-	result, executionErr := executor.Execute(executionCtx, realy.Execution{
+	result, executionErr := executor.Execute(executionCtx, relay.Execution{
 		RunID: assignment.RunID, AttemptID: assignment.AttemptID, AgentID: assignment.Request.AgentID,
 		Runtime: assignment.Request.Runtime,
 		Source:  assignment.Request.Source, Input: assignment.Request.Input, Context: assignment.Request.Context,
@@ -229,7 +229,7 @@ func (w *Worker) RunOnce(ctx context.Context) (realy.Run, error) {
 		stopKeeper()
 		return <-keeperDone
 	}
-	failRun := func(cause error) (realy.Run, error) {
+	failRun := func(cause error) (relay.Run, error) {
 		reportErr := retryFinalReport(ctx, func(reportCtx context.Context) error {
 			return w.ControlPlane.Fail(reportCtx, assignment, cause.Error())
 		})
@@ -237,16 +237,16 @@ func (w *Worker) RunOnce(ctx context.Context) (realy.Run, error) {
 		if errors.Is(reportErr, controlplane.ErrRunCancelled) || errors.Is(leaseErr, controlplane.ErrRunCancelled) {
 			ackErr := w.ControlPlane.AcknowledgeCancellation(ctx, assignment)
 			if ackErr != nil && !errors.Is(ackErr, controlplane.ErrInvalidTransition) {
-				return realy.Run{}, errors.Join(cause, reportErr, leaseErr, ackErr)
+				return relay.Run{}, errors.Join(cause, reportErr, leaseErr, ackErr)
 			}
 			return cancelledRun(assignment), nil
 		}
 		// Once the failure was committed, a renewal racing with that terminal
 		// transition is harmless and must not hide the original execution error.
 		if reportErr == nil {
-			return realy.Run{}, cause
+			return relay.Run{}, cause
 		}
-		return realy.Run{}, errors.Join(cause, reportErr, leaseErr)
+		return relay.Run{}, errors.Join(cause, reportErr, leaseErr)
 	}
 	if executionErr != nil {
 		return failRun(executionErr)
@@ -272,14 +272,14 @@ func (w *Worker) RunOnce(ctx context.Context) (realy.Run, error) {
 	leaseErr := stopLease()
 	if errors.Is(completeErr, controlplane.ErrRunCancelled) || errors.Is(leaseErr, controlplane.ErrRunCancelled) {
 		if err := w.ControlPlane.AcknowledgeCancellation(ctx, assignment); err != nil && !errors.Is(err, controlplane.ErrInvalidTransition) {
-			return realy.Run{}, errors.Join(completeErr, leaseErr, err)
+			return relay.Run{}, errors.Join(completeErr, leaseErr, err)
 		}
 		return cancelledRun(assignment), nil
 	}
 	if completeErr != nil {
-		return realy.Run{}, errors.Join(completeErr, leaseErr)
+		return relay.Run{}, errors.Join(completeErr, leaseErr)
 	}
-	return realy.Run{ID: assignment.RunID, AgentID: assignment.Request.AgentID, Runtime: assignment.Request.Runtime, Source: assignment.Request.Source, Status: realy.RunSucceeded, Result: &result}, nil
+	return relay.Run{ID: assignment.RunID, AgentID: assignment.Request.AgentID, Runtime: assignment.Request.Runtime, Source: assignment.Request.Source, Status: relay.RunSucceeded, Result: &result}, nil
 }
 
 type interactionBroker struct {
@@ -287,7 +287,7 @@ type interactionBroker struct {
 	assignment   controlplane.Assignment
 }
 
-func (b interactionBroker) Request(ctx context.Context, request realy.InteractionRequest) (json.RawMessage, error) {
+func (b interactionBroker) Request(ctx context.Context, request relay.InteractionRequest) (json.RawMessage, error) {
 	value, err := b.controlPlane.CreateInteraction(ctx, b.assignment, request)
 	if err != nil {
 		return nil, err
@@ -358,10 +358,10 @@ func (w *Worker) keepLease(ctx context.Context, assignment controlplane.Assignme
 	}
 }
 
-func cancelledRun(assignment controlplane.Assignment) realy.Run {
-	return realy.Run{
+func cancelledRun(assignment controlplane.Assignment) relay.Run {
+	return relay.Run{
 		ID: assignment.RunID, AgentID: assignment.Request.AgentID, Runtime: assignment.Request.Runtime,
-		Source: assignment.Request.Source, Status: realy.RunCancelled,
-		Attempt: realy.Attempt{ID: assignment.AttemptID, Status: realy.AttemptCancelled},
+		Source: assignment.Request.Source, Status: relay.RunCancelled,
+		Attempt: relay.Attempt{ID: assignment.AttemptID, Status: relay.AttemptCancelled},
 	}
 }

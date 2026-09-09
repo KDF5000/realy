@@ -1,4 +1,4 @@
-package realy
+package relay
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-var ErrRunNotFound = errors.New("realy: run not found")
+var ErrRunNotFound = errors.New("relay: run not found")
 
 // MemoryStore is a concurrency-safe store useful for embedding, tests, and prototypes.
 // Production hosts can implement Store with their own database.

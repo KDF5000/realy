@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/KDF5000/realy"
-	runtimetrae "github.com/KDF5000/realy/runtime/trae"
+	"github.com/KDF5000/relay"
+	runtimetrae "github.com/KDF5000/relay/runtime/trae"
 )
 
 func TestExecutorUsesTraeExecContract(t *testing.T) {
@@ -21,8 +21,8 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 cat >/dev/null
-[ -n "$REALY_TOOL_DIR" ] || exit 10
-[ -n "$REALY_TOOL_TOKEN" ] || exit 11
+[ -n "$RELAY_TOOL_DIR" ] || exit 10
+[ -n "$RELAY_TOOL_TOKEN" ] || exit 11
 [ -n "$TRAE_HOME" ] || exit 12
 [ -z "$MULTICA_TOKEN" ] || exit 13
 printf '%s\n' '{"type":"thread.started","thread_id":"trae-thread"}'
@@ -35,7 +35,7 @@ printf '%s' 'TRAE_RUNTIME_OK' > "$out"
 	t.Setenv("MULTICA_TOKEN", "secret")
 	var events []string
 	executor := runtimetrae.Executor{Config: runtimetrae.Config{Binary: fake, WorkRoot: dir, Ephemeral: true, PermissionMode: "default"}}
-	result, err := executor.Execute(context.Background(), realy.Execution{RunID: "run-trae", Instructions: realy.CompiledInstructions{Stable: "rules", Prompt: "work"}, Capabilities: realy.NewCapabilityInvoker(realy.CapabilityInvokerOptions{}), Emit: func(_ context.Context, event string, _ any) { events = append(events, event) }})
+	result, err := executor.Execute(context.Background(), relay.Execution{RunID: "run-trae", Instructions: relay.CompiledInstructions{Stable: "rules", Prompt: "work"}, Capabilities: relay.NewCapabilityInvoker(relay.CapabilityInvokerOptions{}), Emit: func(_ context.Context, event string, _ any) { events = append(events, event) }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestProbeVersionNormalizesInternalEdition(t *testing.T) {
 
 func TestExecutorRejectsInteractivePermissionModes(t *testing.T) {
 	executor := runtimetrae.Executor{Config: runtimetrae.Config{PermissionMode: "auto"}}
-	_, err := executor.Execute(context.Background(), realy.Execution{})
+	_, err := executor.Execute(context.Background(), relay.Execution{})
 	if err == nil || !strings.Contains(err.Error(), "headless permission mode") {
 		t.Fatalf("error=%v", err)
 	}

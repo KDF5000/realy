@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/KDF5000/realy"
-	"github.com/KDF5000/realy/controlplane"
-	"github.com/KDF5000/realy/transport/httpapi"
+	"github.com/KDF5000/relay"
+	"github.com/KDF5000/relay/controlplane"
+	"github.com/KDF5000/relay/transport/httpapi"
 )
 
 func TestConsoleAssetsAndHostSession(t *testing.T) {
@@ -29,7 +29,7 @@ func TestConsoleAssetsAndHostSession(t *testing.T) {
 	}
 	body, _ := io.ReadAll(response.Body)
 	response.Body.Close()
-	if response.StatusCode != http.StatusOK || !bytes.Contains(body, []byte("Realy Playground")) {
+	if response.StatusCode != http.StatusOK || !bytes.Contains(body, []byte("Relay Playground")) {
 		t.Fatalf("console response status=%d body=%q", response.StatusCode, body)
 	}
 
@@ -51,7 +51,7 @@ func TestConsoleAssetsAndHostSession(t *testing.T) {
 		t.Fatalf("session status=%d cookies=%v", sessionResponse.StatusCode, sessionResponse.Cookies())
 	}
 	cookie := sessionResponse.Cookies()[0]
-	if cookie.Name != "realy_host_token" || !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode {
+	if cookie.Name != "relay_host_token" || !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode {
 		t.Fatalf("unexpected session cookie: %+v", cookie)
 	}
 
@@ -79,7 +79,7 @@ func TestAuthenticatedIsolationArtifactsAndInteractions(t *testing.T) {
 	if _, err := node.RegisterNode(ctx, controlplane.NodeRegistration{ID: "node-a", Capacity: 1, Runtimes: []controlplane.Runtime{{Provider: "mock", State: "healthy"}}}); err != nil {
 		t.Fatal(err)
 	}
-	request := realy.Request{AgentID: "agent", IdempotencyKey: "same-key", Runtime: realy.RuntimeRequirement{Provider: "mock"}, Input: realy.Input{Prompt: "work"}, SessionID: "session-1"}
+	request := relay.Request{AgentID: "agent", IdempotencyKey: "same-key", Runtime: relay.RuntimeRequirement{Provider: "mock"}, Input: relay.Input{Prompt: "work"}, SessionID: "session-1"}
 	runA, err := hostA.Submit(ctx, request)
 	if err != nil {
 		t.Fatal(err)
@@ -94,7 +94,7 @@ func TestAuthenticatedIsolationArtifactsAndInteractions(t *testing.T) {
 	if err := node.Start(ctx, a); err != nil {
 		t.Fatal(err)
 	}
-	artifact, err := node.UploadArtifact(ctx, a, realy.Artifact{Type: "log", Name: "output.txt", ContentType: "text/plain"}, bytes.NewBufferString("hello artifact"))
+	artifact, err := node.UploadArtifact(ctx, a, relay.Artifact{Type: "log", Name: "output.txt", ContentType: "text/plain"}, bytes.NewBufferString("hello artifact"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +107,7 @@ func TestAuthenticatedIsolationArtifactsAndInteractions(t *testing.T) {
 	if string(body) != "hello artifact" {
 		t.Fatalf("artifact = %q", body)
 	}
-	interaction, err := node.CreateInteraction(ctx, a, realy.InteractionRequest{Kind: realy.InteractionApproval, Prompt: "deploy?"})
+	interaction, err := node.CreateInteraction(ctx, a, relay.InteractionRequest{Kind: relay.InteractionApproval, Prompt: "deploy?"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +139,7 @@ func TestHostAndNodeProtocol(t *testing.T) {
 	if _, err := client.RegisterNode(ctx, controlplane.NodeRegistration{ID: "node", Runtimes: []controlplane.Runtime{{Provider: "mock"}}, Capacity: 1}); err != nil {
 		t.Fatal(err)
 	}
-	run, err := client.Submit(ctx, realy.Request{AgentID: "agent", IdempotencyKey: "one", Runtime: realy.RuntimeRequirement{Provider: "mock", Model: "model-a"}, Input: realy.Input{Prompt: "work"}})
+	run, err := client.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "one", Runtime: relay.RuntimeRequirement{Provider: "mock", Model: "model-a"}, Input: relay.Input{Prompt: "work"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,14 +168,14 @@ func TestHostAndNodeProtocol(t *testing.T) {
 	if err := client.AppendEvent(ctx, assignment.RunID, assignment.AttemptID, assignment.LeaseToken, "executor.output", map[string]string{"text": "ok"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := client.Complete(ctx, assignment, realy.Result{Summary: "done"}); err != nil {
+	if err := client.Complete(ctx, assignment, relay.Result{Summary: "done"}); err != nil {
 		t.Fatal(err)
 	}
 	completed, err := client.GetRun(ctx, run.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if completed.Status != realy.RunSucceeded {
+	if completed.Status != relay.RunSucceeded {
 		t.Fatalf("unexpected status: %s", completed.Status)
 	}
 	events, err := client.Events(ctx, run.ID)
@@ -185,8 +185,8 @@ func TestHostAndNodeProtocol(t *testing.T) {
 	if len(events) != 8 {
 		t.Fatalf("expected 8 events, got %d", len(events))
 	}
-	var streamed []realy.Event
-	if err := client.StreamEvents(ctx, run.ID, 2, func(event realy.Event) error {
+	var streamed []relay.Event
+	if err := client.StreamEvents(ctx, run.ID, 2, func(event relay.Event) error {
 		streamed = append(streamed, event)
 		return nil
 	}); err != nil {
@@ -204,7 +204,7 @@ func TestCancellationProtocol(t *testing.T) {
 	client := httpapi.NewClient(server.URL)
 	ctx := context.Background()
 	_, _ = client.RegisterNode(ctx, controlplane.NodeRegistration{ID: "node", Runtimes: []controlplane.Runtime{{Provider: "mock"}}, Capacity: 1})
-	run, err := client.Submit(ctx, realy.Request{AgentID: "agent", IdempotencyKey: "cancel-http", Runtime: realy.RuntimeRequirement{Provider: "mock"}, Input: realy.Input{Prompt: "work"}})
+	run, err := client.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "cancel-http", Runtime: relay.RuntimeRequirement{Provider: "mock"}, Input: relay.Input{Prompt: "work"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +216,7 @@ func TestCancellationProtocol(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pending.Status != realy.RunCancelling {
+	if pending.Status != relay.RunCancelling {
 		t.Fatalf("status = %s, want cancelling", pending.Status)
 	}
 	update, err := client.Renew(ctx, assignment)
@@ -230,7 +230,7 @@ func TestCancellationProtocol(t *testing.T) {
 		t.Fatal(err)
 	}
 	cancelled, _ := client.GetRun(ctx, run.ID)
-	if cancelled.Status != realy.RunCancelled {
+	if cancelled.Status != relay.RunCancelled {
 		t.Fatalf("status = %s, want cancelled", cancelled.Status)
 	}
 }
@@ -243,7 +243,7 @@ func TestEventStreamDeliversNewEventsUntilTerminalState(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	_, _ = client.RegisterNode(ctx, controlplane.NodeRegistration{ID: "node", Runtimes: []controlplane.Runtime{{Provider: "mock"}}, Capacity: 1})
-	run, err := client.Submit(ctx, realy.Request{AgentID: "agent", IdempotencyKey: "stream-live", Runtime: realy.RuntimeRequirement{Provider: "mock"}, Input: realy.Input{Prompt: "work"}})
+	run, err := client.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "stream-live", Runtime: relay.RuntimeRequirement{Provider: "mock"}, Input: relay.Input{Prompt: "work"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,12 +255,12 @@ func TestEventStreamDeliversNewEventsUntilTerminalState(t *testing.T) {
 			err = client.Start(ctx, assignment)
 		}
 		if err == nil {
-			err = client.Complete(ctx, assignment, realy.Result{Summary: "streamed"})
+			err = client.Complete(ctx, assignment, relay.Result{Summary: "streamed"})
 		}
 		producer <- err
 	}()
 	var sequences []int
-	if err := client.StreamEvents(ctx, run.ID, 0, func(event realy.Event) error {
+	if err := client.StreamEvents(ctx, run.ID, 0, func(event relay.Event) error {
 		sequences = append(sequences, event.Sequence)
 		return nil
 	}); err != nil {
@@ -282,11 +282,11 @@ func TestEventStreamDeliversNewEventsUntilTerminalState(t *testing.T) {
 func TestEventStreamReportsCleanDisconnectBeforeTerminal(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
-		fmt.Fprint(w, "id: 1\nevent: realy.event\ndata: {\"id\":\"event-1\",\"sequence\":1,\"type\":\"run.started\"}\n\n")
+		fmt.Fprint(w, "id: 1\nevent: relay.event\ndata: {\"id\":\"event-1\",\"sequence\":1,\"type\":\"run.started\"}\n\n")
 	}))
 	defer server.Close()
 	var count int
-	err := httpapi.NewClient(server.URL).StreamEvents(context.Background(), "run", 0, func(realy.Event) error { count++; return nil })
+	err := httpapi.NewClient(server.URL).StreamEvents(context.Background(), "run", 0, func(relay.Event) error { count++; return nil })
 	if !errors.Is(err, httpapi.ErrEventStreamInterrupted) || count != 1 {
 		t.Fatalf("count=%d error=%v", count, err)
 	}

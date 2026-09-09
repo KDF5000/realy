@@ -9,15 +9,15 @@ import (
 	"io"
 	"time"
 
-	"github.com/KDF5000/realy"
+	"github.com/KDF5000/relay"
 )
 
 var (
-	ErrNotFound          = errors.New("realy control plane: not found")
-	ErrNoAssignment      = errors.New("realy control plane: no matching assignment")
-	ErrInvalidLease      = errors.New("realy control plane: invalid lease")
-	ErrInvalidTransition = errors.New("realy control plane: invalid transition")
-	ErrRunCancelled      = errors.New("realy control plane: run cancelled")
+	ErrNotFound          = errors.New("relay control plane: not found")
+	ErrNoAssignment      = errors.New("relay control plane: no matching assignment")
+	ErrInvalidLease      = errors.New("relay control plane: invalid lease")
+	ErrInvalidTransition = errors.New("relay control plane: invalid transition")
+	ErrRunCancelled      = errors.New("relay control plane: run cancelled")
 )
 
 // Storage is the durable state boundary of the distributed control plane.
@@ -25,31 +25,31 @@ var (
 type Storage interface {
 	RegisterNode(context.Context, NodeRegistration) (Node, error)
 	Heartbeat(context.Context, string) (Node, error)
-	Submit(context.Context, realy.Request) (realy.Run, error)
+	Submit(context.Context, relay.Request) (relay.Run, error)
 	Claim(context.Context, string, time.Duration) (Assignment, error)
 	Renew(context.Context, Assignment, time.Duration) (LeaseUpdate, error)
 	Reconcile(context.Context, time.Time, int) (int, error)
-	CancelRun(context.Context, string, CancelRequest) (realy.Run, error)
+	CancelRun(context.Context, string, CancelRequest) (relay.Run, error)
 	AcknowledgeCancellation(context.Context, Assignment) error
 	Start(context.Context, Assignment) error
 	AppendEvent(context.Context, string, string, string, string, any, ...string) error
-	Complete(context.Context, Assignment, realy.Result) error
+	Complete(context.Context, Assignment, relay.Result) error
 	Fail(context.Context, Assignment, string) error
-	GetRun(context.Context, string) (realy.Run, error)
-	Events(context.Context, string) ([]realy.Event, error)
-	EventsAfter(context.Context, string, int) ([]realy.Event, error)
+	GetRun(context.Context, string) (relay.Run, error)
+	Events(context.Context, string) ([]relay.Event, error)
+	EventsAfter(context.Context, string, int) ([]relay.Event, error)
 	Nodes(context.Context) ([]Node, error)
-	AddArtifact(context.Context, Assignment, realy.Artifact) error
-	Artifacts(context.Context, string) ([]realy.Artifact, error)
-	Artifact(context.Context, string) (realy.Artifact, error)
-	ReserveCapability(context.Context, Assignment, string, string, realy.CapabilityRequest) (realy.CapabilityReservation, error)
-	FinishCapability(context.Context, Assignment, realy.CapabilityReservation, realy.CapabilityResult, string) error
-	ListRuns(context.Context, string, string, string, int) ([]realy.Run, error)
-	Attempts(context.Context, string) ([]realy.Attempt, error)
-	CreateInteraction(context.Context, Assignment, realy.InteractionRequest) (realy.Interaction, error)
-	GetInteraction(context.Context, Assignment, string) (realy.Interaction, error)
-	Interactions(context.Context, string) ([]realy.Interaction, error)
-	ResolveInteraction(context.Context, string, json.RawMessage, string, string) (realy.Interaction, error)
+	AddArtifact(context.Context, Assignment, relay.Artifact) error
+	Artifacts(context.Context, string) ([]relay.Artifact, error)
+	Artifact(context.Context, string) (relay.Artifact, error)
+	ReserveCapability(context.Context, Assignment, string, string, relay.CapabilityRequest) (relay.CapabilityReservation, error)
+	FinishCapability(context.Context, Assignment, relay.CapabilityReservation, relay.CapabilityResult, string) error
+	ListRuns(context.Context, string, string, string, int) ([]relay.Run, error)
+	Attempts(context.Context, string) ([]relay.Attempt, error)
+	CreateInteraction(context.Context, Assignment, relay.InteractionRequest) (relay.Interaction, error)
+	GetInteraction(context.Context, Assignment, string) (relay.Interaction, error)
+	Interactions(context.Context, string) ([]relay.Interaction, error)
+	ResolveInteraction(context.Context, string, json.RawMessage, string, string) (relay.Interaction, error)
 }
 
 type BlobStore interface {
@@ -82,7 +82,7 @@ func NewWithStorage(storage Storage, leaseTTL time.Duration) *Service {
 
 func NewWithOptions(storage Storage, options Options) *Service {
 	if storage == nil {
-		panic("realy control plane: storage is required")
+		panic("relay control plane: storage is required")
 	}
 	if options.LeaseTTL <= 0 {
 		options.LeaseTTL = 30 * time.Second
@@ -121,24 +121,24 @@ func (s *Service) Heartbeat(ctx context.Context, nodeID string) (Node, error) {
 	return s.storage.Heartbeat(ctx, nodeID)
 }
 
-func (s *Service) Submit(ctx context.Context, request realy.Request) (realy.Run, error) {
+func (s *Service) Submit(ctx context.Context, request relay.Request) (relay.Run, error) {
 	if scope, ok := AccessFrom(ctx); ok && scope.Kind == AccessHost {
 		request.TenantID, request.ProjectID = scope.TenantID, scope.ProjectID
 	}
 	if request.AgentID == "" || request.IdempotencyKey == "" || request.Input.Prompt == "" || request.Runtime.Provider == "" {
-		return realy.Run{}, errors.New("agent ID, idempotency key, prompt, and runtime provider are required")
+		return relay.Run{}, errors.New("agent ID, idempotency key, prompt, and runtime provider are required")
 	}
 	if request.Retry.MaxAttempts <= 0 {
 		request.Retry.MaxAttempts = 1
 	}
 	if request.Retry.Backoff != "" {
 		if _, err := time.ParseDuration(request.Retry.Backoff); err != nil {
-			return realy.Run{}, errors.New("retry backoff must be a valid duration")
+			return relay.Run{}, errors.New("retry backoff must be a valid duration")
 		}
 	}
 	if request.Timeout != "" {
 		if duration, err := time.ParseDuration(request.Timeout); err != nil || duration <= 0 {
-			return realy.Run{}, errors.New("timeout must be a positive duration")
+			return relay.Run{}, errors.New("timeout must be a positive duration")
 		}
 	}
 	return s.storage.Submit(ctx, request)
@@ -163,11 +163,11 @@ func (s *Service) Reconcile(ctx context.Context, limit int) (int, error) {
 	return s.storage.Reconcile(ctx, time.Now().UTC(), limit)
 }
 
-func (s *Service) CancelRun(ctx context.Context, runID string, request CancelRequest) (realy.Run, error) {
+func (s *Service) CancelRun(ctx context.Context, runID string, request CancelRequest) (relay.Run, error) {
 	if run, err := s.storage.GetRun(ctx, runID); err != nil {
-		return realy.Run{}, err
+		return relay.Run{}, err
 	} else if err := authorizeRunScope(ctx, run); err != nil {
-		return realy.Run{}, err
+		return relay.Run{}, err
 	}
 	return s.storage.CancelRun(ctx, runID, request)
 }
@@ -180,7 +180,7 @@ func (s *Service) AppendEvent(ctx context.Context, runID, attemptID, lease, even
 	return s.storage.AppendEvent(ctx, runID, attemptID, lease, eventType, data, eventIDs...)
 }
 
-func (s *Service) Complete(ctx context.Context, assignment Assignment, result realy.Result) error {
+func (s *Service) Complete(ctx context.Context, assignment Assignment, result relay.Result) error {
 	return s.storage.Complete(ctx, assignment, result)
 }
 
@@ -188,25 +188,25 @@ func (s *Service) Fail(ctx context.Context, assignment Assignment, cause string)
 	return s.storage.Fail(ctx, assignment, cause)
 }
 
-func (s *Service) GetRun(ctx context.Context, runID string) (realy.Run, error) {
+func (s *Service) GetRun(ctx context.Context, runID string) (relay.Run, error) {
 	run, err := s.storage.GetRun(ctx, runID)
 	if err != nil {
-		return realy.Run{}, err
+		return relay.Run{}, err
 	}
 	if err := authorizeRunScope(ctx, run); err != nil {
-		return realy.Run{}, err
+		return relay.Run{}, err
 	}
 	return run, nil
 }
 
-func (s *Service) Events(ctx context.Context, runID string) ([]realy.Event, error) {
+func (s *Service) Events(ctx context.Context, runID string) ([]relay.Event, error) {
 	if _, err := s.GetRun(ctx, runID); err != nil {
 		return nil, err
 	}
 	return s.storage.Events(ctx, runID)
 }
 
-func (s *Service) EventsAfter(ctx context.Context, runID string, after int) ([]realy.Event, error) {
+func (s *Service) EventsAfter(ctx context.Context, runID string, after int) ([]relay.Event, error) {
 	if _, err := s.GetRun(ctx, runID); err != nil {
 		return nil, err
 	}
@@ -228,81 +228,81 @@ func (s *Service) Nodes(ctx context.Context) ([]Node, error) {
 	return nodes, nil
 }
 
-func (s *Service) UploadArtifact(ctx context.Context, assignment Assignment, artifact realy.Artifact, reader io.Reader) (realy.Artifact, error) {
+func (s *Service) UploadArtifact(ctx context.Context, assignment Assignment, artifact relay.Artifact, reader io.Reader) (relay.Artifact, error) {
 	artifact.ID = newControlPlaneID("artifact")
 	artifact.RunID = assignment.RunID
 	artifact.Ref = "/v1/artifacts/" + artifact.ID
 	digest := sha256.New()
 	size, err := s.blobs.Put(ctx, artifact.ID, io.TeeReader(reader, digest))
 	if err != nil {
-		return realy.Artifact{}, err
+		return relay.Artifact{}, err
 	}
 	artifact.Size = size
 	artifact.SHA256 = hex.EncodeToString(digest.Sum(nil))
 	if err := s.storage.AddArtifact(ctx, assignment, artifact); err != nil {
 		_ = s.blobs.Delete(context.Background(), artifact.ID)
-		return realy.Artifact{}, err
+		return relay.Artifact{}, err
 	}
 	return artifact, nil
 }
 
-func (s *Service) Artifacts(ctx context.Context, runID string) ([]realy.Artifact, error) {
+func (s *Service) Artifacts(ctx context.Context, runID string) ([]relay.Artifact, error) {
 	if _, err := s.GetRun(ctx, runID); err != nil {
 		return nil, err
 	}
 	return s.storage.Artifacts(ctx, runID)
 }
 
-func (s *Service) OpenArtifact(ctx context.Context, artifactID string) (realy.Artifact, io.ReadCloser, error) {
+func (s *Service) OpenArtifact(ctx context.Context, artifactID string) (relay.Artifact, io.ReadCloser, error) {
 	metadata, err := s.storage.Artifact(ctx, artifactID)
 	if err != nil {
-		return realy.Artifact{}, nil, err
+		return relay.Artifact{}, nil, err
 	}
 	if _, err := s.GetRun(ctx, metadata.RunID); err != nil {
-		return realy.Artifact{}, nil, err
+		return relay.Artifact{}, nil, err
 	}
 	reader, err := s.blobs.Open(ctx, artifactID)
 	return metadata, reader, err
 }
 
-func (s *Service) ReserveCapability(ctx context.Context, a Assignment, key, hash string, request realy.CapabilityRequest) (realy.CapabilityReservation, error) {
+func (s *Service) ReserveCapability(ctx context.Context, a Assignment, key, hash string, request relay.CapabilityRequest) (relay.CapabilityReservation, error) {
 	return s.storage.ReserveCapability(ctx, a, key, hash, request)
 }
 
-func (s *Service) FinishCapability(ctx context.Context, a Assignment, reservation realy.CapabilityReservation, result realy.CapabilityResult, cause string) error {
+func (s *Service) FinishCapability(ctx context.Context, a Assignment, reservation relay.CapabilityReservation, result relay.CapabilityResult, cause string) error {
 	return s.storage.FinishCapability(ctx, a, reservation, result, cause)
 }
 
-func (s *Service) ListRuns(ctx context.Context, limit int) ([]realy.Run, error) {
+func (s *Service) ListRuns(ctx context.Context, limit int) ([]relay.Run, error) {
 	scope, _ := AccessFrom(ctx)
 	return s.storage.ListRuns(ctx, scope.TenantID, scope.ProjectID, "", limit)
 }
-func (s *Service) SessionRuns(ctx context.Context, sessionID string, limit int) ([]realy.Run, error) {
+func (s *Service) SessionRuns(ctx context.Context, sessionID string, limit int) ([]relay.Run, error) {
 	scope, _ := AccessFrom(ctx)
 	return s.storage.ListRuns(ctx, scope.TenantID, scope.ProjectID, sessionID, limit)
 }
-func (s *Service) Attempts(ctx context.Context, runID string) ([]realy.Attempt, error) {
+func (s *Service) Attempts(ctx context.Context, runID string) ([]relay.Attempt, error) {
 	if _, err := s.GetRun(ctx, runID); err != nil {
 		return nil, err
 	}
 	return s.storage.Attempts(ctx, runID)
 }
-func (s *Service) CreateInteraction(ctx context.Context, a Assignment, r realy.InteractionRequest) (realy.Interaction, error) {
-	if r.Kind != realy.InteractionInput && r.Kind != realy.InteractionApproval {
-		return realy.Interaction{}, errors.New("interaction kind must be input or approval")
+func (s *Service) CreateInteraction(ctx context.Context, a Assignment, r relay.InteractionRequest) (relay.Interaction, error) {
+	if r.Kind != relay.InteractionInput && r.Kind != relay.InteractionApproval {
+		return relay.Interaction{}, errors.New("interaction kind must be input or approval")
 	}
 	return s.storage.CreateInteraction(ctx, a, r)
 }
-func (s *Service) GetInteraction(ctx context.Context, a Assignment, id string) (realy.Interaction, error) {
+func (s *Service) GetInteraction(ctx context.Context, a Assignment, id string) (relay.Interaction, error) {
 	return s.storage.GetInteraction(ctx, a, id)
 }
-func (s *Service) Interactions(ctx context.Context, runID string) ([]realy.Interaction, error) {
+func (s *Service) Interactions(ctx context.Context, runID string) ([]relay.Interaction, error) {
 	if _, err := s.GetRun(ctx, runID); err != nil {
 		return nil, err
 	}
 	return s.storage.Interactions(ctx, runID)
 }
-func (s *Service) ResolveInteraction(ctx context.Context, id string, response json.RawMessage) (realy.Interaction, error) {
+func (s *Service) ResolveInteraction(ctx context.Context, id string, response json.RawMessage) (relay.Interaction, error) {
 	scope, _ := AccessFrom(ctx)
 	return s.storage.ResolveInteraction(ctx, id, response, scope.TenantID, scope.ProjectID)
 }

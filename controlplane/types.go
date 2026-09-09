@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/KDF5000/realy"
+	"github.com/KDF5000/relay"
 	semver "github.com/Masterminds/semver/v3"
 )
 
@@ -27,7 +27,7 @@ type RuntimeModel struct {
 	Default     bool   `json:"default,omitempty"`
 }
 
-func RuntimeMatches(runtime Runtime, requirement realy.RuntimeRequirement) bool {
+func RuntimeMatches(runtime Runtime, requirement relay.RuntimeRequirement) bool {
 	if requirement.ID != "" && runtime.ID != requirement.ID {
 		return false
 	}
@@ -92,7 +92,7 @@ type Assignment struct {
 	AttemptID      string        `json:"attempt_id"`
 	LeaseToken     string        `json:"lease_token"`
 	LeaseExpiresAt time.Time     `json:"lease_expires_at"`
-	Request        realy.Request `json:"request"`
+	Request        relay.Request `json:"request"`
 }
 
 type LeaseUpdate struct {
@@ -108,7 +108,7 @@ type CancelRequest struct {
 
 type Completion struct {
 	LeaseToken string       `json:"lease_token"`
-	Result     realy.Result `json:"result"`
+	Result     relay.Result `json:"result"`
 }
 
 type Failure struct {

@@ -41,7 +41,7 @@ func ProbeModels(ctx context.Context, config Config, fork ForkOptions) ([]ModelI
 	var stderr bytes.Buffer
 	command.Stderr = &limitedBuffer{buffer: &stderr, remaining: 1 << 20}
 	if err := command.Start(); err != nil {
-		return nil, fmt.Errorf("realy %s: start model discovery: %w", fork.Name, err)
+		return nil, fmt.Errorf("relay %s: start model discovery: %w", fork.Name, err)
 	}
 	defer func() {
 		stop()
@@ -52,7 +52,7 @@ func ProbeModels(ctx context.Context, config Config, fork ForkOptions) ([]ModelI
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 64<<10), 8<<20)
 	write := func(value any) error { return json.NewEncoder(stdin).Encode(value) }
-	if err := write(map[string]any{"id": 1, "method": "initialize", "params": map[string]any{"clientInfo": map[string]string{"name": "realy-model-probe", "version": "0.1"}, "capabilities": map[string]bool{"experimentalApi": true}}}); err != nil {
+	if err := write(map[string]any{"id": 1, "method": "initialize", "params": map[string]any{"clientInfo": map[string]string{"name": "relay-model-probe", "version": "0.1"}, "capabilities": map[string]bool{"experimentalApi": true}}}); err != nil {
 		return nil, err
 	}
 	if _, err := waitRPCResponse(scanner, 1, nil); err != nil {
@@ -89,7 +89,7 @@ func ProbeModels(ctx context.Context, config Config, fork ForkOptions) ([]ModelI
 			NextCursor *string `json:"nextCursor"`
 		}
 		if err := json.Unmarshal(data, &response); err != nil {
-			return nil, fmt.Errorf("realy %s: decode model catalog: %w", fork.Name, err)
+			return nil, fmt.Errorf("relay %s: decode model catalog: %w", fork.Name, err)
 		}
 		for _, item := range response.Data {
 			modelID := item.Model
@@ -107,7 +107,7 @@ func ProbeModels(ctx context.Context, config Config, fork ForkOptions) ([]ModelI
 		cursor = *response.NextCursor
 	}
 	if len(models) == 0 {
-		return nil, fmt.Errorf("realy %s: model discovery returned no visible models", fork.Name)
+		return nil, fmt.Errorf("relay %s: model discovery returned no visible models", fork.Name)
 	}
 	return models, nil
 }

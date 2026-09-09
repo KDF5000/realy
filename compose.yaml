@@ -1,43 +1,45 @@
+name: relay
+
 services:
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: realy
+      POSTGRES_USER: relay
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
-      POSTGRES_DB: realy
+      POSTGRES_DB: relay
     ports:
-      - "127.0.0.1:${REALY_POSTGRES_PORT:-55432}:5432"
+      - "127.0.0.1:${RELAY_POSTGRES_PORT:-55432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U realy -d realy"]
+      test: ["CMD-SHELL", "pg_isready -U relay -d relay"]
       interval: 5s
       timeout: 3s
       retries: 20
     volumes:
-      - realy-postgres:/var/lib/postgresql/data
+      - relay-postgres:/var/lib/postgresql/data
 
-  realy-server:
+  relay-server:
     build:
       context: .
       dockerfile: Dockerfile
-    image: realy-server:${REALY_VERSION:-local}
+    image: relay-server:${RELAY_VERSION:-local}
     restart: unless-stopped
     init: true
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      REALY_DATABASE_URL: postgres://realy:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/realy?sslmode=disable
-      REALY_ARTIFACT_BACKEND: file
-      REALY_ARTIFACT_ROOT: /var/lib/realy/artifacts
-      REALY_HOST_TOKEN: ${REALY_HOST_TOKEN:?set REALY_HOST_TOKEN in .env}
-      REALY_NODE_TOKEN: ${REALY_NODE_TOKEN:?set REALY_NODE_TOKEN in .env}
-      REALY_TENANT_ID: ${REALY_TENANT_ID:-default}
-      REALY_PROJECT_ID: ${REALY_PROJECT_ID:-default}
+      RELAY_DATABASE_URL: postgres://relay:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/relay?sslmode=disable
+      RELAY_ARTIFACT_BACKEND: file
+      RELAY_ARTIFACT_ROOT: /var/lib/relay/artifacts
+      RELAY_HOST_TOKEN: ${RELAY_HOST_TOKEN:?set RELAY_HOST_TOKEN in .env}
+      RELAY_NODE_TOKEN: ${RELAY_NODE_TOKEN:?set RELAY_NODE_TOKEN in .env}
+      RELAY_TENANT_ID: ${RELAY_TENANT_ID:-default}
+      RELAY_PROJECT_ID: ${RELAY_PROJECT_ID:-default}
     ports:
-      - "${REALY_BIND_ADDRESS:-0.0.0.0}:${REALY_SERVER_PORT:-8787}:8787"
+      - "${RELAY_BIND_ADDRESS:-0.0.0.0}:${RELAY_SERVER_PORT:-8787}:8787"
     volumes:
-      - realy-artifacts:/var/lib/realy/artifacts
+      - relay-artifacts:/var/lib/relay/artifacts
     read_only: true
     tmpfs:
       - /tmp
@@ -52,5 +54,5 @@ services:
     stop_grace_period: 30s
 
 volumes:
-  realy-postgres:
-  realy-artifacts:
+  relay-postgres:
+  relay-artifacts:

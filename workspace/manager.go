@@ -12,8 +12,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/KDF5000/realy"
-	runtimeprocess "github.com/KDF5000/realy/runtime/process"
+	"github.com/KDF5000/relay"
+	runtimeprocess "github.com/KDF5000/relay/runtime/process"
 )
 
 type Prepared struct {
@@ -22,7 +22,7 @@ type Prepared struct {
 }
 
 type Provider interface {
-	Prepare(context.Context, string, string, realy.WorkspaceSpec) (Prepared, error)
+	Prepare(context.Context, string, string, relay.WorkspaceSpec) (Prepared, error)
 }
 
 // Manager prepares isolated workspaces and keeps bare Git mirrors for efficient
@@ -32,10 +32,10 @@ type Manager struct {
 	mu   sync.Mutex
 }
 
-func (m *Manager) Prepare(ctx context.Context, runID, attemptID string, spec realy.WorkspaceSpec) (Prepared, error) {
+func (m *Manager) Prepare(ctx context.Context, runID, attemptID string, spec relay.WorkspaceSpec) (Prepared, error) {
 	root := m.Root
 	if root == "" {
-		root = filepath.Join(os.TempDir(), "realy-workspaces")
+		root = filepath.Join(os.TempDir(), "relay-workspaces")
 	}
 	root, err := filepath.Abs(root)
 	if err != nil {
@@ -50,24 +50,24 @@ func (m *Manager) Prepare(ctx context.Context, runID, attemptID string, spec rea
 		return preparedDirectory(root, dir, spec.Subdir, spec.Ephemeral || spec.Kind == "temp")
 	case "local":
 		if spec.Source == "" || !filepath.IsAbs(spec.Source) {
-			return Prepared{}, errors.New("realy workspace: local source must be an absolute path")
+			return Prepared{}, errors.New("relay workspace: local source must be an absolute path")
 		}
 		info, err := os.Stat(spec.Source)
 		if err != nil || !info.IsDir() {
-			return Prepared{}, fmt.Errorf("realy workspace: local source is not a directory: %s", spec.Source)
+			return Prepared{}, fmt.Errorf("relay workspace: local source is not a directory: %s", spec.Source)
 		}
 		return preparedDirectory("", spec.Source, spec.Subdir, false)
 	case "git":
 		if spec.Source == "" {
-			return Prepared{}, errors.New("realy workspace: git source is required")
+			return Prepared{}, errors.New("relay workspace: git source is required")
 		}
 		return m.prepareGit(ctx, root, runID, attemptID, spec)
 	default:
-		return Prepared{}, fmt.Errorf("realy workspace: unsupported kind %q", spec.Kind)
+		return Prepared{}, fmt.Errorf("relay workspace: unsupported kind %q", spec.Kind)
 	}
 }
 
-func (m *Manager) prepareGit(ctx context.Context, root, runID, attemptID string, spec realy.WorkspaceSpec) (Prepared, error) {
+func (m *Manager) prepareGit(ctx context.Context, root, runID, attemptID string, spec relay.WorkspaceSpec) (Prepared, error) {
 	digest := sha256.Sum256([]byte(spec.Source))
 	mirror := filepath.Join(root, "git", hex.EncodeToString(digest[:12])+".git")
 	worktree := filepath.Join(root, "runs", safeSegment(runID), safeSegment(attemptID))
@@ -123,11 +123,11 @@ func preparedDirectory(root, dir, subdir string, ephemeral bool) (Prepared, erro
 		return Prepared{}, err
 	}
 	if target != base && !strings.HasPrefix(target, base+string(os.PathSeparator)) {
-		return Prepared{}, errors.New("realy workspace: subdir escapes workspace")
+		return Prepared{}, errors.New("relay workspace: subdir escapes workspace")
 	}
 	info, err := os.Stat(target)
 	if err != nil || !info.IsDir() {
-		return Prepared{}, fmt.Errorf("realy workspace: subdir is not a directory: %s", subdir)
+		return Prepared{}, fmt.Errorf("relay workspace: subdir is not a directory: %s", subdir)
 	}
 	cleanup := func(context.Context) error { return nil }
 	if ephemeral && root != "" {
@@ -142,7 +142,7 @@ func runGit(ctx context.Context, dir string, args ...string) error {
 	command.Dir = dir
 	output, err := command.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("realy workspace: git %s: %w: %s", args[0], err, strings.TrimSpace(string(output)))
+		return fmt.Errorf("relay workspace: git %s: %w: %s", args[0], err, strings.TrimSpace(string(output)))
 	}
 	return nil
 }

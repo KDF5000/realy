@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/KDF5000/realy"
-	"github.com/KDF5000/realy/controlplane"
-	controlplanepostgres "github.com/KDF5000/realy/controlplane/postgres"
-	"github.com/KDF5000/realy/transport/httpapi"
+	"github.com/KDF5000/relay"
+	"github.com/KDF5000/relay/controlplane"
+	controlplanepostgres "github.com/KDF5000/relay/controlplane/postgres"
+	"github.com/KDF5000/relay/transport/httpapi"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -32,7 +32,7 @@ func TestMultiNodeCrashRecoveryOverHTTP(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	run, err := client.Submit(ctx, realy.Request{AgentID: "agent", IdempotencyKey: "multi-node-crash", Runtime: realy.RuntimeRequirement{Provider: "mock", Version: "^1.0.0"}, Input: realy.Input{Prompt: "recover"}, Retry: realy.RetryPolicy{MaxAttempts: 2}})
+	run, err := client.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "multi-node-crash", Runtime: relay.RuntimeRequirement{Provider: "mock", Version: "^1.0.0"}, Input: relay.Input{Prompt: "recover"}, Retry: relay.RetryPolicy{MaxAttempts: 2}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestMultiNodeCrashRecoveryOverHTTP(t *testing.T) {
 	if err := client.Start(ctx, first); err != nil {
 		t.Fatal(err)
 	}
-	artifact, err := client.UploadArtifact(ctx, first, realy.Artifact{Type: "log", Name: "attempt.log"}, bytes.NewBufferString("before crash"))
+	artifact, err := client.UploadArtifact(ctx, first, relay.Artifact{Type: "log", Name: "attempt.log"}, bytes.NewBufferString("before crash"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,12 +51,12 @@ func TestMultiNodeCrashRecoveryOverHTTP(t *testing.T) {
 	if err != nil || len(artifacts) != 1 || artifacts[0].ID != artifact.ID {
 		t.Fatalf("artifacts = %+v, %v", artifacts, err)
 	}
-	request := realy.CapabilityRequest{Name: "issue.read", Version: "1", Resource: "MUL-1", Input: json.RawMessage(`{"id":"MUL-1"}`)}
+	request := relay.CapabilityRequest{Name: "issue.read", Version: "1", Resource: "MUL-1", Input: json.RawMessage(`{"id":"MUL-1"}`)}
 	reservation, err := client.ReserveCapability(ctx, first, "read-once", "stable-hash", request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cached := realy.CapabilityResult{CallID: reservation.CallID, Output: json.RawMessage(`{"title":"cached"}`)}
+	cached := relay.CapabilityResult{CallID: reservation.CallID, Output: json.RawMessage(`{"title":"cached"}`)}
 	if err := client.FinishCapability(ctx, first, reservation, cached, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -81,14 +81,14 @@ func TestMultiNodeCrashRecoveryOverHTTP(t *testing.T) {
 	if replayed.Execute || replayed.Result == nil || string(replayed.Result.Output) != string(cached.Output) {
 		t.Fatalf("unexpected replay: %+v", replayed)
 	}
-	if err := client.Complete(ctx, second, realy.Result{Summary: "recovered"}); err != nil {
+	if err := client.Complete(ctx, second, relay.Result{Summary: "recovered"}); err != nil {
 		t.Fatal(err)
 	}
 	attempts, err := client.Attempts(ctx, run.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(attempts) != 2 || attempts[0].Status != realy.AttemptLost || attempts[1].Status != realy.AttemptSucceeded {
+	if len(attempts) != 2 || attempts[0].Status != relay.AttemptLost || attempts[1].Status != relay.AttemptSucceeded {
 		t.Fatalf("unexpected attempts: %+v", attempts)
 	}
 }
@@ -106,11 +106,11 @@ func TestPostgresControlPlaneLifecycleAndConcurrentClaim(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	request := realy.Request{
+	request := relay.Request{
 		AgentID: "agent", IdempotencyKey: "postgres-lifecycle",
-		Runtime: realy.RuntimeRequirement{Provider: "codex"},
-		Input:   realy.Input{Type: "task", Version: "1", Prompt: "work"},
-		Capabilities: []realy.CapabilityGrant{{
+		Runtime: relay.RuntimeRequirement{Provider: "codex"},
+		Input:   relay.Input{Type: "task", Version: "1", Prompt: "work"},
+		Capabilities: []relay.CapabilityGrant{{
 			Name: "issue.read", Version: "1", Effect: "read", Resources: []string{"MUL-42"},
 		}},
 	}
@@ -161,14 +161,14 @@ func TestPostgresControlPlaneLifecycleAndConcurrentClaim(t *testing.T) {
 	if err := service.AppendEvent(ctx, assignment.RunID, assignment.AttemptID, assignment.LeaseToken, "runtime.test", map[string]string{"state": "ok"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.Complete(ctx, assignment, realy.Result{Summary: "persisted"}); err != nil {
+	if err := service.Complete(ctx, assignment, relay.Result{Summary: "persisted"}); err != nil {
 		t.Fatal(err)
 	}
 	completed, err := service.GetRun(ctx, run.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if completed.Status != realy.RunSucceeded || completed.Result == nil || completed.Result.Summary != "persisted" {
+	if completed.Status != relay.RunSucceeded || completed.Result == nil || completed.Result.Summary != "persisted" {
 		t.Fatalf("unexpected persisted run: %+v", completed)
 	}
 	events, err := service.Events(ctx, run.ID)
@@ -200,7 +200,7 @@ func TestPostgresExpiredLeaseCanBeReclaimed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = service.Submit(ctx, realy.Request{AgentID: "agent", IdempotencyKey: "expired", Runtime: realy.RuntimeRequirement{Provider: "codex"}, Input: realy.Input{Prompt: "work"}})
+	_, err = service.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "expired", Runtime: relay.RuntimeRequirement{Provider: "codex"}, Input: relay.Input{Prompt: "work"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,10 +237,10 @@ func TestPostgresRecoversExpiredRunningAttemptAndFencesOldNode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	run, err := service.Submit(ctx, realy.Request{
+	run, err := service.Submit(ctx, relay.Request{
 		AgentID: "agent", IdempotencyKey: "running-recovery",
-		Runtime: realy.RuntimeRequirement{Provider: "codex"}, Input: realy.Input{Prompt: "work"},
-		Retry: realy.RetryPolicy{MaxAttempts: 2, Backoff: "100ms"},
+		Runtime: relay.RuntimeRequirement{Provider: "codex"}, Input: relay.Input{Prompt: "work"},
+		Retry: relay.RetryPolicy{MaxAttempts: 2, Backoff: "100ms"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -279,10 +279,10 @@ func TestPostgresRecoversExpiredRunningAttemptAndFencesOldNode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if retried.Status != realy.RunQueued || retried.Attempt.Status != realy.AttemptQueued || retried.Attempt.Number != 2 {
+	if retried.Status != relay.RunQueued || retried.Attempt.Status != relay.AttemptQueued || retried.Attempt.Number != 2 {
 		t.Fatalf("unexpected recovered run: %+v", retried)
 	}
-	if err := service.Complete(ctx, first, realy.Result{Summary: "stale"}); !errors.Is(err, controlplane.ErrInvalidLease) {
+	if err := service.Complete(ctx, first, relay.Result{Summary: "stale"}); !errors.Is(err, controlplane.ErrInvalidLease) {
 		t.Fatalf("stale completion = %v, want invalid lease", err)
 	}
 	if _, err := service.Claim(ctx, "node"); !errors.Is(err, controlplane.ErrNoAssignment) {
@@ -318,7 +318,7 @@ func TestPostgresCancellationAndTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	running, err := service.Submit(ctx, realy.Request{AgentID: "agent", IdempotencyKey: "cancel-running", Runtime: realy.RuntimeRequirement{Provider: "codex"}, Input: realy.Input{Prompt: "work"}})
+	running, err := service.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "cancel-running", Runtime: relay.RuntimeRequirement{Provider: "codex"}, Input: relay.Input{Prompt: "work"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -333,7 +333,7 @@ func TestPostgresCancellationAndTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pending.Status != realy.RunCancelling {
+	if pending.Status != relay.RunCancelling {
 		t.Fatalf("status = %s, want cancelling", pending.Status)
 	}
 	update, err := service.Renew(ctx, assignment)
@@ -343,7 +343,7 @@ func TestPostgresCancellationAndTimeout(t *testing.T) {
 	if !update.CancelRequested || update.CancelReason != "stop" {
 		t.Fatalf("unexpected cancellation directive: %+v", update)
 	}
-	if err := service.Complete(ctx, assignment, realy.Result{Summary: "late"}); !errors.Is(err, controlplane.ErrRunCancelled) {
+	if err := service.Complete(ctx, assignment, relay.Result{Summary: "late"}); !errors.Is(err, controlplane.ErrRunCancelled) {
 		t.Fatalf("late completion = %v, want run cancelled", err)
 	}
 	if err := service.AcknowledgeCancellation(ctx, assignment); err != nil {
@@ -353,11 +353,11 @@ func TestPostgresCancellationAndTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cancelled.Status != realy.RunCancelled || cancelled.Attempt.Status != realy.AttemptCancelled || cancelled.CancelledAt == nil {
+	if cancelled.Status != relay.RunCancelled || cancelled.Attempt.Status != relay.AttemptCancelled || cancelled.CancelledAt == nil {
 		t.Fatalf("unexpected cancelled run: %+v", cancelled)
 	}
 
-	timed, err := service.Submit(ctx, realy.Request{AgentID: "agent", IdempotencyKey: "timeout-queued", Runtime: realy.RuntimeRequirement{Provider: "codex"}, Input: realy.Input{Prompt: "work"}, Timeout: "100ms"})
+	timed, err := service.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "timeout-queued", Runtime: relay.RuntimeRequirement{Provider: "codex"}, Input: relay.Input{Prompt: "work"}, Timeout: "100ms"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -369,23 +369,23 @@ func TestPostgresCancellationAndTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if timed.Status != realy.RunCancelled || timed.CancelReason != "run timeout exceeded" {
+	if timed.Status != relay.RunCancelled || timed.CancelReason != "run timeout exceeded" {
 		t.Fatalf("unexpected timed out run: %+v", timed)
 	}
 }
 
 func openTestStore(t *testing.T) *controlplanepostgres.Store {
 	t.Helper()
-	databaseURL := os.Getenv("REALY_TEST_DATABASE_URL")
+	databaseURL := os.Getenv("RELAY_TEST_DATABASE_URL")
 	if databaseURL == "" {
-		t.Skip("REALY_TEST_DATABASE_URL is not set")
+		t.Skip("RELAY_TEST_DATABASE_URL is not set")
 	}
 	ctx := context.Background()
 	admin, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	schema := fmt.Sprintf("realy_test_%d", time.Now().UnixNano())
+	schema := fmt.Sprintf("relay_test_%d", time.Now().UnixNano())
 	identifier := pgx.Identifier{schema}.Sanitize()
 	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+identifier); err != nil {
 		admin.Close()

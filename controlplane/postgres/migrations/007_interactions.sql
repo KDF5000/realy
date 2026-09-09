@@ -1,5 +1,5 @@
-ALTER TABLE realy_runs ADD COLUMN IF NOT EXISTS session_id TEXT NOT NULL DEFAULT '';
-CREATE TABLE IF NOT EXISTS realy_interactions (
+ALTER TABLE relay_runs ADD COLUMN IF NOT EXISTS session_id TEXT NOT NULL DEFAULT '';
+CREATE TABLE IF NOT EXISTS relay_interactions (
     id TEXT PRIMARY KEY,
     run_id TEXT NOT NULL,
     attempt_id TEXT NOT NULL,

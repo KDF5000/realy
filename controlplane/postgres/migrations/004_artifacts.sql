@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS realy_artifacts (
+CREATE TABLE IF NOT EXISTS relay_artifacts (
     id TEXT PRIMARY KEY,
     run_id TEXT NOT NULL,
     attempt_id TEXT NOT NULL,

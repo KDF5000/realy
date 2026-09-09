@@ -6,10 +6,10 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/KDF5000/realy"
+	"github.com/KDF5000/relay"
 )
 
-var ErrBindingNotFound = errors.New("realy: capability binding not found")
+var ErrBindingNotFound = errors.New("relay: capability binding not found")
 
 type Descriptor struct {
 	Name    string `json:"name"`
@@ -19,7 +19,7 @@ type Descriptor struct {
 
 type entry struct {
 	descriptor Descriptor
-	provider   realy.CapabilityProvider
+	provider   relay.CapabilityProvider
 }
 
 // Registry routes capability calls to user-provided CLI, HTTP, RPC, or in-process bindings.
@@ -30,9 +30,9 @@ type Registry struct {
 
 func NewRegistry() *Registry { return &Registry{entries: make(map[string]entry)} }
 
-func (r *Registry) Register(descriptor Descriptor, provider realy.CapabilityProvider) error {
+func (r *Registry) Register(descriptor Descriptor, provider relay.CapabilityProvider) error {
 	if descriptor.Name == "" || descriptor.Version == "" || descriptor.Kind == "" || provider == nil {
-		return errors.New("realy: binding name, version, kind, and provider are required")
+		return errors.New("relay: binding name, version, kind, and provider are required")
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -40,7 +40,7 @@ func (r *Registry) Register(descriptor Descriptor, provider realy.CapabilityProv
 	return nil
 }
 
-func (r *Registry) Invoke(ctx context.Context, request realy.CapabilityRequest) (json.RawMessage, error) {
+func (r *Registry) Invoke(ctx context.Context, request relay.CapabilityRequest) (json.RawMessage, error) {
 	r.mu.RLock()
 	registered, ok := r.entries[key(request.Name, request.Version)]
 	r.mu.RUnlock()

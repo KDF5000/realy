@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/KDF5000/realy"
-	"github.com/KDF5000/realy/controlplane"
-	"github.com/KDF5000/realy/node"
+	"github.com/KDF5000/relay"
+	"github.com/KDF5000/relay/controlplane"
+	"github.com/KDF5000/relay/node"
 )
 
 type failingEvents struct {
@@ -31,7 +31,7 @@ type lostCompletionResponse struct {
 	calls atomic.Int32
 }
 
-func (c *lostCompletionResponse) Complete(ctx context.Context, assignment controlplane.Assignment, result realy.Result) error {
+func (c *lostCompletionResponse) Complete(ctx context.Context, assignment controlplane.Assignment, result relay.Result) error {
 	c.calls.Add(1)
 	if err := c.ControlPlane.Complete(ctx, assignment, result); err != nil {
 		return err
@@ -53,10 +53,10 @@ func (c *slowArtifactControlPlane) Renew(ctx context.Context, assignment control
 	return c.ControlPlane.Renew(ctx, assignment)
 }
 
-func (c *slowArtifactControlPlane) UploadArtifact(ctx context.Context, assignment controlplane.Assignment, artifact realy.Artifact, content io.Reader) (realy.Artifact, error) {
+func (c *slowArtifactControlPlane) UploadArtifact(ctx context.Context, assignment controlplane.Assignment, artifact relay.Artifact, content io.Reader) (relay.Artifact, error) {
 	select {
 	case <-ctx.Done():
-		return realy.Artifact{}, ctx.Err()
+		return relay.Artifact{}, ctx.Err()
 	case <-time.After(c.delay):
 	}
 	_, err := io.Copy(io.Discard, content)
@@ -70,18 +70,18 @@ func TestWorkerRetriesLostCompletionResponse(t *testing.T) {
 	worker := &node.Worker{
 		Registration: controlplane.NodeRegistration{ID: "completion-node", Runtimes: []controlplane.Runtime{{Provider: "test"}}, Capacity: 1},
 		ControlPlane: cp,
-		Executors: node.ExecutorMap{"test": realy.ExecutorFunc(func(context.Context, realy.Execution) (realy.Result, error) {
-			return realy.Result{Summary: "done"}, nil
+		Executors: node.ExecutorMap{"test": relay.ExecutorFunc(func(context.Context, relay.Execution) (relay.Result, error) {
+			return relay.Result{Summary: "done"}, nil
 		})},
 	}
 	if _, err := worker.Register(ctx); err != nil {
 		t.Fatal(err)
 	}
-	run, err := service.Submit(ctx, realy.Request{AgentID: "agent", IdempotencyKey: "completion-response", Runtime: realy.RuntimeRequirement{Provider: "test"}, Input: realy.Input{Prompt: "work"}})
+	run, err := service.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "completion-response", Runtime: relay.RuntimeRequirement{Provider: "test"}, Input: relay.Input{Prompt: "work"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if completed, err := worker.RunOnce(ctx); err != nil || completed.Status != realy.RunSucceeded {
+	if completed, err := worker.RunOnce(ctx); err != nil || completed.Status != relay.RunSucceeded {
 		t.Fatalf("completed=%+v err=%v", completed, err)
 	}
 	if cp.calls.Load() != 2 {
@@ -110,17 +110,17 @@ func TestWorkerRenewsLeaseThroughArtifactUpload(t *testing.T) {
 	worker := &node.Worker{
 		Registration: controlplane.NodeRegistration{ID: "artifact-node", Runtimes: []controlplane.Runtime{{Provider: "test"}}, Capacity: 1},
 		ControlPlane: cp,
-		Executors: node.ExecutorMap{"test": realy.ExecutorFunc(func(context.Context, realy.Execution) (realy.Result, error) {
-			return realy.Result{Summary: "done", Artifacts: []realy.Artifact{{Name: "result.txt", Ref: artifactPath}}}, nil
+		Executors: node.ExecutorMap{"test": relay.ExecutorFunc(func(context.Context, relay.Execution) (relay.Result, error) {
+			return relay.Result{Summary: "done", Artifacts: []relay.Artifact{{Name: "result.txt", Ref: artifactPath}}}, nil
 		})},
 	}
 	if _, err := worker.Register(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Submit(ctx, realy.Request{AgentID: "agent", IdempotencyKey: "slow-artifact", Runtime: realy.RuntimeRequirement{Provider: "test"}, Input: realy.Input{Prompt: "work"}}); err != nil {
+	if _, err := service.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "slow-artifact", Runtime: relay.RuntimeRequirement{Provider: "test"}, Input: relay.Input{Prompt: "work"}}); err != nil {
 		t.Fatal(err)
 	}
-	if completed, err := worker.RunOnce(ctx); err != nil || completed.Status != realy.RunSucceeded {
+	if completed, err := worker.RunOnce(ctx); err != nil || completed.Status != relay.RunSucceeded {
 		t.Fatalf("completed=%+v err=%v", completed, err)
 	}
 	if cp.renewals.Load() < 2 {
@@ -146,15 +146,15 @@ func TestWorkerRetriesLostResponseWithoutDuplicatingOutput(t *testing.T) {
 	worker := &node.Worker{
 		Registration: controlplane.NodeRegistration{ID: "retry-node", Runtimes: []controlplane.Runtime{{Provider: "test"}}, Capacity: 1},
 		ControlPlane: cp,
-		Executors: node.ExecutorMap{"test": realy.ExecutorFunc(func(ctx context.Context, execution realy.Execution) (realy.Result, error) {
+		Executors: node.ExecutorMap{"test": relay.ExecutorFunc(func(ctx context.Context, execution relay.Execution) (relay.Result, error) {
 			execution.Emit(ctx, "assistant.message.delta", map[string]string{"delta": "hello"})
-			return realy.Result{Summary: "hello"}, nil
+			return relay.Result{Summary: "hello"}, nil
 		})},
 	}
 	if _, err := worker.Register(ctx); err != nil {
 		t.Fatal(err)
 	}
-	run, err := service.Submit(ctx, realy.Request{AgentID: "agent", IdempotencyKey: "lost-response", Runtime: realy.RuntimeRequirement{Provider: "test"}, Input: realy.Input{Prompt: "work"}})
+	run, err := service.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "lost-response", Runtime: relay.RuntimeRequirement{Provider: "test"}, Input: relay.Input{Prompt: "work"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +162,7 @@ func TestWorkerRetriesLostResponseWithoutDuplicatingOutput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if completed.Status != realy.RunSucceeded || cp.calls != 2 {
+	if completed.Status != relay.RunSucceeded || cp.calls != 2 {
 		t.Fatalf("status=%s calls=%d", completed.Status, cp.calls)
 	}
 	events, err := service.Events(ctx, run.ID)
@@ -191,20 +191,20 @@ func TestEventDeliveryFailureCannotCompleteRun(t *testing.T) {
 	worker := &node.Worker{
 		Registration: controlplane.NodeRegistration{ID: "event-node", Runtimes: []controlplane.Runtime{{Provider: "test"}}, Capacity: 1},
 		ControlPlane: failingEvents{ControlPlane: service, cause: cause},
-		Executors: node.ExecutorMap{"test": realy.ExecutorFunc(func(ctx context.Context, execution realy.Execution) (realy.Result, error) {
+		Executors: node.ExecutorMap{"test": relay.ExecutorFunc(func(ctx context.Context, execution relay.Execution) (relay.Result, error) {
 			execution.Emit(ctx, "assistant.message.delta", map[string]string{"delta": "hello"})
 			if ctx.Err() == nil {
 				t.Error("failed delivery must cancel runtime execution")
 			}
 			// Even an adapter that returns success after cancellation cannot hide
 			// the delivery failure from the host.
-			return realy.Result{Summary: "done"}, nil
+			return relay.Result{Summary: "done"}, nil
 		})},
 	}
 	if _, err := worker.Register(ctx); err != nil {
 		t.Fatal(err)
 	}
-	run, err := service.Submit(ctx, realy.Request{AgentID: "agent", IdempotencyKey: "event-failure", Runtime: realy.RuntimeRequirement{Provider: "test"}, Input: realy.Input{Prompt: "work"}})
+	run, err := service.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "event-failure", Runtime: relay.RuntimeRequirement{Provider: "test"}, Input: relay.Input{Prompt: "work"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +215,7 @@ func TestEventDeliveryFailureCannotCompleteRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if persisted.Status != realy.RunFailed {
+	if persisted.Status != relay.RunFailed {
 		t.Fatalf("status = %s, want failed", persisted.Status)
 	}
 }
@@ -226,19 +226,19 @@ func TestWorkerRenewsLeaseDuringLongExecution(t *testing.T) {
 	worker := &node.Worker{
 		Registration: controlplane.NodeRegistration{ID: "node", Runtimes: []controlplane.Runtime{{Provider: "slow"}}, Capacity: 1},
 		ControlPlane: service,
-		Executors: node.ExecutorMap{"slow": realy.ExecutorFunc(func(ctx context.Context, _ realy.Execution) (realy.Result, error) {
+		Executors: node.ExecutorMap{"slow": relay.ExecutorFunc(func(ctx context.Context, _ relay.Execution) (relay.Result, error) {
 			select {
 			case <-ctx.Done():
-				return realy.Result{}, ctx.Err()
+				return relay.Result{}, ctx.Err()
 			case <-time.After(120 * time.Millisecond):
-				return realy.Result{Summary: "done"}, nil
+				return relay.Result{Summary: "done"}, nil
 			}
 		})},
 	}
 	if _, err := worker.Register(ctx); err != nil {
 		t.Fatal(err)
 	}
-	_, err := service.Submit(ctx, realy.Request{AgentID: "agent", IdempotencyKey: "long", Runtime: realy.RuntimeRequirement{Provider: "slow"}, Input: realy.Input{Prompt: "work"}})
+	_, err := service.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "long", Runtime: relay.RuntimeRequirement{Provider: "slow"}, Input: relay.Input{Prompt: "work"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +246,7 @@ func TestWorkerRenewsLeaseDuringLongExecution(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if completed.Status != realy.RunSucceeded || completed.Result == nil || completed.Result.Summary != "done" {
+	if completed.Status != relay.RunSucceeded || completed.Result == nil || completed.Result.Summary != "done" {
 		t.Fatalf("unexpected completed run: %+v", completed)
 	}
 }
@@ -258,21 +258,21 @@ func TestWorkerStopsExecutionAndAcknowledgesCancellation(t *testing.T) {
 	worker := &node.Worker{
 		Registration: controlplane.NodeRegistration{ID: "node", Runtimes: []controlplane.Runtime{{Provider: "blocking"}}, Capacity: 1},
 		ControlPlane: service,
-		Executors: node.ExecutorMap{"blocking": realy.ExecutorFunc(func(ctx context.Context, _ realy.Execution) (realy.Result, error) {
+		Executors: node.ExecutorMap{"blocking": relay.ExecutorFunc(func(ctx context.Context, _ relay.Execution) (relay.Result, error) {
 			close(started)
 			<-ctx.Done()
-			return realy.Result{}, ctx.Err()
+			return relay.Result{}, ctx.Err()
 		})},
 	}
 	if _, err := worker.Register(ctx); err != nil {
 		t.Fatal(err)
 	}
-	submitted, err := service.Submit(ctx, realy.Request{AgentID: "agent", IdempotencyKey: "cancel-worker", Runtime: realy.RuntimeRequirement{Provider: "blocking"}, Input: realy.Input{Prompt: "work"}})
+	submitted, err := service.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "cancel-worker", Runtime: relay.RuntimeRequirement{Provider: "blocking"}, Input: relay.Input{Prompt: "work"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	type result struct {
-		run realy.Run
+		run relay.Run
 		err error
 	}
 	done := make(chan result, 1)
@@ -289,14 +289,14 @@ func TestWorkerStopsExecutionAndAcknowledgesCancellation(t *testing.T) {
 		if result.err != nil {
 			t.Fatal(result.err)
 		}
-		if result.run.Status != realy.RunCancelled {
+		if result.run.Status != relay.RunCancelled {
 			t.Fatalf("worker returned status %s", result.run.Status)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("worker did not stop after cancellation")
 	}
 	persisted, _ := service.GetRun(ctx, submitted.ID)
-	if persisted.Status != realy.RunCancelled || persisted.Attempt.Status != realy.AttemptCancelled {
+	if persisted.Status != relay.RunCancelled || persisted.Attempt.Status != relay.AttemptCancelled {
 		t.Fatalf("unexpected persisted cancellation: %+v", persisted)
 	}
 }
@@ -307,7 +307,7 @@ func TestRunPoolUsesConfiguredCapacityConcurrently(t *testing.T) {
 	release := make(chan struct{})
 	var mu sync.Mutex
 	active, peak := 0, 0
-	executor := realy.ExecutorFunc(func(ctx context.Context, _ realy.Execution) (realy.Result, error) {
+	executor := relay.ExecutorFunc(func(ctx context.Context, _ relay.Execution) (relay.Result, error) {
 		mu.Lock()
 		active++
 		if active > peak {
@@ -317,13 +317,13 @@ func TestRunPoolUsesConfiguredCapacityConcurrently(t *testing.T) {
 		started <- struct{}{}
 		select {
 		case <-ctx.Done():
-			return realy.Result{}, ctx.Err()
+			return relay.Result{}, ctx.Err()
 		case <-release:
 		}
 		mu.Lock()
 		active--
 		mu.Unlock()
-		return realy.Result{Summary: "done"}, nil
+		return relay.Result{Summary: "done"}, nil
 	})
 	worker := &node.Worker{
 		Registration: controlplane.NodeRegistration{ID: "node", Runtimes: []controlplane.Runtime{{Provider: "parallel"}}, Capacity: 2},
@@ -335,7 +335,7 @@ func TestRunPoolUsesConfiguredCapacityConcurrently(t *testing.T) {
 		t.Fatal(err)
 	}
 	for index := range 2 {
-		_, err := service.Submit(ctx, realy.Request{AgentID: "agent", IdempotencyKey: fmt.Sprintf("parallel-%d", index), Runtime: realy.RuntimeRequirement{Provider: "parallel"}, Input: realy.Input{Prompt: "work"}})
+		_, err := service.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: fmt.Sprintf("parallel-%d", index), Runtime: relay.RuntimeRequirement{Provider: "parallel"}, Input: relay.Input{Prompt: "work"}})
 		if err != nil {
 			t.Fatal(err)
 		}
