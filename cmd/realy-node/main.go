@@ -2,13 +2,16 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -24,12 +27,14 @@ import (
 )
 
 type config struct {
-	Server        string                        `json:"server"`
-	Token         string                        `json:"token,omitempty"`
-	Node          controlplane.NodeRegistration `json:"node"`
-	Runtimes      []runtimeConfig               `json:"runtimes"`
-	Bindings      []bindingConfig               `json:"bindings"`
-	WorkspaceRoot string                        `json:"workspace_root,omitempty"`
+	Server         string                        `json:"server"`
+	Token          string                        `json:"token,omitempty"`
+	Node           controlplane.NodeRegistration `json:"node"`
+	Runtimes       []runtimeConfig               `json:"runtimes"`
+	Bindings       []bindingConfig               `json:"bindings"`
+	WorkspaceRoot  string                        `json:"workspace_root,omitempty"`
+	OutboxRoot     string                        `json:"outbox_root,omitempty"`
+	OutboxMaxBytes int64                         `json:"outbox_max_bytes,omitempty"`
 }
 type runtimeConfig struct {
 	ID               string                      `json:"id,omitempty"`
@@ -143,7 +148,22 @@ func main() {
 		token = os.Getenv("REALY_NODE_TOKEN")
 	}
 	client := httpapi.NewAuthenticatedClient(cfg.Server, token)
+	if cfg.OutboxRoot == "" {
+		root, err := os.UserConfigDir()
+		if err != nil {
+			log.Fatal(err)
+		}
+		cfg.OutboxRoot = filepath.Join(root, "realy", "outbox")
+	}
+	scope := sha256.Sum256([]byte(cfg.Server + "\x00" + cfg.Node.ID))
+	cfg.OutboxRoot = filepath.Join(cfg.OutboxRoot, fmt.Sprintf("%x", scope[:16]))
+	outbox, err := node.OpenOutbox(cfg.OutboxRoot, cfg.OutboxMaxBytes)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer outbox.Close()
 	worker := &node.Worker{Registration: cfg.Node, ControlPlane: client, Bindings: registry, Executors: executors, Workspaces: &workspace.Manager{Root: cfg.WorkspaceRoot}}
+	worker.Outbox = outbox
 	executionCtx, cancelExecutions := context.WithCancel(context.Background())
 	defer cancelExecutions()
 	claimCtx, stopClaims := context.WithCancel(context.Background())
@@ -151,6 +171,9 @@ func main() {
 		log.Fatal(err)
 	}
 	log.Printf("Realy node %s registered", cfg.Node.ID)
+	if err := outbox.Recover(executionCtx, client, func(message string) { log.Print(message) }); err != nil {
+		log.Fatalf("outbox recovery failed; pending events retained: %v", err)
+	}
 	go func() {
 		ticker := time.NewTicker(*heartbeat)
 		defer ticker.Stop()

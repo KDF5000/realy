@@ -24,7 +24,7 @@ type ControlPlane interface {
 	Claim(context.Context, string) (controlplane.Assignment, error)
 	Start(context.Context, controlplane.Assignment) error
 	Renew(context.Context, controlplane.Assignment) (controlplane.LeaseUpdate, error)
-	AppendEvent(context.Context, string, string, string, string, any) error
+	AppendEvent(context.Context, string, string, string, string, any, ...string) error
 	Complete(context.Context, controlplane.Assignment, realy.Result) error
 	Fail(context.Context, controlplane.Assignment, string) error
 	AcknowledgeCancellation(context.Context, controlplane.Assignment) error
@@ -53,6 +53,7 @@ type Worker struct {
 	Executors    ExecutorResolver
 	Compiler     realy.InstructionCompiler
 	Workspaces   workspace.Provider
+	Outbox       *Outbox
 }
 
 // RunPool runs one claim loop per configured capacity slot. Cancelling
@@ -181,11 +182,30 @@ func (w *Worker) RunOnce(ctx context.Context) (realy.Run, error) {
 	if w.Bindings != nil {
 		provider = w.Bindings
 	}
+	// One in-flight event provides bounded buffering and backpressure. Keep its
+	// identity and immutable payload until acknowledged, including lost responses.
+	var eventMu sync.Mutex
+	var eventErr error
+	eventSequence := 0
+	emit := func(eventCtx context.Context, eventType string, data any) {
+		eventMu.Lock()
+		defer eventMu.Unlock()
+		if eventErr != nil {
+			return
+		}
+		eventSequence++
+		deliver := deliverEvent
+		if w.Outbox != nil {
+			deliver = w.Outbox.deliver
+		}
+		if err := deliver(eventCtx, w.ControlPlane, assignment, fmt.Sprint(eventSequence), eventType, data); err != nil {
+			eventErr = fmt.Errorf("realy node: deliver event %s: %w", eventType, err)
+			cancelExecution()
+		}
+	}
 	invoker := realy.NewCapabilityInvoker(realy.CapabilityInvokerOptions{
 		Run: run, Principal: assignment.Request.Principal, Grants: assignment.Request.Capabilities, Provider: provider,
-		Emit: func(eventCtx context.Context, eventType string, data any) {
-			_ = w.ControlPlane.AppendEvent(eventCtx, assignment.RunID, assignment.AttemptID, assignment.LeaseToken, eventType, data)
-		},
+		Emit: emit,
 		Reserve: func(callCtx context.Context, key, hash string, request realy.CapabilityRequest) (realy.CapabilityReservation, error) {
 			return w.ControlPlane.ReserveCapability(callCtx, assignment, key, hash, request)
 		},
@@ -200,24 +220,36 @@ func (w *Worker) RunOnce(ctx context.Context) (realy.Run, error) {
 		Instructions: compiled, Capabilities: invoker,
 		WorkDir:      workDir,
 		Interactions: interactionBroker{controlPlane: w.ControlPlane, assignment: assignment},
-		Emit: func(eventCtx context.Context, eventType string, data any) {
-			_ = w.ControlPlane.AppendEvent(eventCtx, assignment.RunID, assignment.AttemptID, assignment.LeaseToken, eventType, data)
-		},
+		Emit:         emit,
 	})
-	stopKeeper()
-	leaseErr := <-keeperDone
-	if leaseErr != nil {
-		if errors.Is(leaseErr, controlplane.ErrRunCancelled) {
-			if err := w.ControlPlane.AcknowledgeCancellation(ctx, assignment); err != nil {
-				return realy.Run{}, err
+	eventMu.Lock()
+	executionErr = errors.Join(executionErr, eventErr)
+	eventMu.Unlock()
+	stopLease := func() error {
+		stopKeeper()
+		return <-keeperDone
+	}
+	failRun := func(cause error) (realy.Run, error) {
+		reportErr := retryFinalReport(ctx, func(reportCtx context.Context) error {
+			return w.ControlPlane.Fail(reportCtx, assignment, cause.Error())
+		})
+		leaseErr := stopLease()
+		if errors.Is(reportErr, controlplane.ErrRunCancelled) || errors.Is(leaseErr, controlplane.ErrRunCancelled) {
+			ackErr := w.ControlPlane.AcknowledgeCancellation(ctx, assignment)
+			if ackErr != nil && !errors.Is(ackErr, controlplane.ErrInvalidTransition) {
+				return realy.Run{}, errors.Join(cause, reportErr, leaseErr, ackErr)
 			}
 			return cancelledRun(assignment), nil
 		}
-		return realy.Run{}, leaseErr
+		// Once the failure was committed, a renewal racing with that terminal
+		// transition is harmless and must not hide the original execution error.
+		if reportErr == nil {
+			return realy.Run{}, cause
+		}
+		return realy.Run{}, errors.Join(cause, reportErr, leaseErr)
 	}
 	if executionErr != nil {
-		_ = w.ControlPlane.Fail(ctx, assignment, executionErr.Error())
-		return realy.Run{}, executionErr
+		return failRun(executionErr)
 	}
 	for index, artifact := range result.Artifacts {
 		if artifact.Ref == "" {
@@ -225,19 +257,27 @@ func (w *Worker) RunOnce(ctx context.Context) (realy.Run, error) {
 		}
 		file, openErr := os.Open(artifact.Ref)
 		if openErr != nil {
-			_ = w.ControlPlane.Fail(ctx, assignment, openErr.Error())
-			return realy.Run{}, openErr
+			return failRun(openErr)
 		}
-		uploaded, uploadErr := w.ControlPlane.UploadArtifact(ctx, assignment, artifact, file)
+		uploaded, uploadErr := w.ControlPlane.UploadArtifact(executionCtx, assignment, artifact, file)
 		_ = file.Close()
 		if uploadErr != nil {
-			_ = w.ControlPlane.Fail(ctx, assignment, uploadErr.Error())
-			return realy.Run{}, uploadErr
+			return failRun(uploadErr)
 		}
 		result.Artifacts[index] = uploaded
 	}
-	if err := w.ControlPlane.Complete(ctx, assignment, result); err != nil {
-		return realy.Run{}, err
+	completeErr := retryFinalReport(ctx, func(reportCtx context.Context) error {
+		return w.ControlPlane.Complete(reportCtx, assignment, result)
+	})
+	leaseErr := stopLease()
+	if errors.Is(completeErr, controlplane.ErrRunCancelled) || errors.Is(leaseErr, controlplane.ErrRunCancelled) {
+		if err := w.ControlPlane.AcknowledgeCancellation(ctx, assignment); err != nil && !errors.Is(err, controlplane.ErrInvalidTransition) {
+			return realy.Run{}, errors.Join(completeErr, leaseErr, err)
+		}
+		return cancelledRun(assignment), nil
+	}
+	if completeErr != nil {
+		return realy.Run{}, errors.Join(completeErr, leaseErr)
 	}
 	return realy.Run{ID: assignment.RunID, AgentID: assignment.Request.AgentID, Runtime: assignment.Request.Runtime, Source: assignment.Request.Source, Status: realy.RunSucceeded, Result: &result}, nil
 }

@@ -132,3 +132,35 @@ printf '%s\n' '{"method":"turn/completed","params":{"threadId":"thread-stream","
 		t.Fatalf("result=%q deltas=%q", result.Summary, deltas)
 	}
 }
+
+func TestAppServerRejectsPartialMessageWithoutTurnCompletion(t *testing.T) {
+	dir := t.TempDir()
+	fake := filepath.Join(dir, "codex")
+	script := `#!/bin/sh
+[ "$1" = "app-server" ] || exit 8
+read -r initialize
+printf '%s\n' '{"id":1,"result":{"userAgent":"fake"}}'
+read -r initialized
+read -r thread_start
+printf '%s\n' '{"id":2,"result":{"thread":{"id":"thread-partial"}}}'
+read -r turn_start
+printf '%s\n' '{"id":3,"result":{"turn":{"id":"turn-partial"}}}'
+printf '%s\n' '{"method":"item/agentMessage/delta","params":{"delta":"partial output"}}'
+`
+	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var partial string
+	executor := runtimecodex.Executor{Config: runtimecodex.Config{Binary: fake, Protocol: "app-server", WorkRoot: dir, Ephemeral: true}}
+	_, err := executor.Execute(context.Background(), realy.Execution{RunID: "run-partial", Instructions: realy.CompiledInstructions{Prompt: "work"}, Capabilities: realy.NewCapabilityInvoker(realy.CapabilityInvokerOptions{}), Emit: func(_ context.Context, event string, data any) {
+		if event == "assistant.message.delta" {
+			partial += data.(map[string]string)["delta"]
+		}
+	}})
+	if err == nil || !strings.Contains(err.Error(), "before turn/completed") {
+		t.Fatalf("expected incomplete turn error, got %v", err)
+	}
+	if partial != "partial output" {
+		t.Fatalf("partial output = %q", partial)
+	}
+}

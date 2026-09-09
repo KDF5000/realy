@@ -10,20 +10,44 @@ import (
 	"github.com/KDF5000/realy/controlplane"
 )
 
-type Backend interface {
+// Submitter is sufficient for applications that only dispatch work.
+// Both Client and the HTTP transport implement it.
+type Submitter interface {
 	Submit(context.Context, realy.Request) (realy.Run, error)
+}
+
+type Runs interface {
+	Submitter
 	GetRun(context.Context, string) (realy.Run, error)
-	Events(context.Context, string) ([]realy.Event, error)
-	Nodes(context.Context) ([]controlplane.Node, error)
 	CancelRun(context.Context, string, controlplane.CancelRequest) (realy.Run, error)
-	StreamEvents(context.Context, string, int, func(realy.Event) error) error
-	Artifacts(context.Context, string) ([]realy.Artifact, error)
-	OpenArtifact(context.Context, string) (io.ReadCloser, error)
 	ListRuns(context.Context, int) ([]realy.Run, error)
 	SessionRuns(context.Context, string, int) ([]realy.Run, error)
 	Attempts(context.Context, string) ([]realy.Attempt, error)
+}
+
+type Events interface {
+	Events(context.Context, string) ([]realy.Event, error)
+	StreamEvents(context.Context, string, int, func(realy.Event) error) error
+}
+
+type Artifacts interface {
+	Artifacts(context.Context, string) ([]realy.Artifact, error)
+	OpenArtifact(context.Context, string) (io.ReadCloser, error)
+}
+
+type Interactions interface {
 	Interactions(context.Context, string) ([]realy.Interaction, error)
 	ResolveInteraction(context.Context, string, json.RawMessage) (realy.Interaction, error)
+}
+
+// Backend composes the complete convenience client's capabilities. Business
+// integrations should accept only the small interfaces they actually consume.
+type Backend interface {
+	Runs
+	Events
+	Artifacts
+	Interactions
+	Nodes(context.Context) ([]controlplane.Node, error)
 }
 
 func (c *Client) Artifacts(ctx context.Context, runID string) ([]realy.Artifact, error) {
@@ -55,6 +79,9 @@ func (c *Client) Submit(ctx context.Context, request realy.Request) (realy.Run, 
 	return c.backend.Submit(ctx, request)
 }
 func (c *Client) Run(ctx context.Context, runID string) (realy.Run, error) {
+	return c.backend.GetRun(ctx, runID)
+}
+func (c *Client) GetRun(ctx context.Context, runID string) (realy.Run, error) {
 	return c.backend.GetRun(ctx, runID)
 }
 func (c *Client) Events(ctx context.Context, runID string) ([]realy.Event, error) {

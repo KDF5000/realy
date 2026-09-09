@@ -278,3 +278,16 @@ func TestEventStreamDeliversNewEventsUntilTerminalState(t *testing.T) {
 		}
 	}
 }
+
+func TestEventStreamReportsCleanDisconnectBeforeTerminal(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "id: 1\nevent: realy.event\ndata: {\"id\":\"event-1\",\"sequence\":1,\"type\":\"run.started\"}\n\n")
+	}))
+	defer server.Close()
+	var count int
+	err := httpapi.NewClient(server.URL).StreamEvents(context.Background(), "run", 0, func(realy.Event) error { count++; return nil })
+	if !errors.Is(err, httpapi.ErrEventStreamInterrupted) || count != 1 {
+		t.Fatalf("count=%d error=%v", count, err)
+	}
+}

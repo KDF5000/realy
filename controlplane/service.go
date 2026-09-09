@@ -32,7 +32,7 @@ type Storage interface {
 	CancelRun(context.Context, string, CancelRequest) (realy.Run, error)
 	AcknowledgeCancellation(context.Context, Assignment) error
 	Start(context.Context, Assignment) error
-	AppendEvent(context.Context, string, string, string, string, any) error
+	AppendEvent(context.Context, string, string, string, string, any, ...string) error
 	Complete(context.Context, Assignment, realy.Result) error
 	Fail(context.Context, Assignment, string) error
 	GetRun(context.Context, string) (realy.Run, error)
@@ -176,8 +176,8 @@ func (s *Service) AcknowledgeCancellation(ctx context.Context, assignment Assign
 	return s.storage.AcknowledgeCancellation(ctx, assignment)
 }
 
-func (s *Service) AppendEvent(ctx context.Context, runID, attemptID, lease, eventType string, data any) error {
-	return s.storage.AppendEvent(ctx, runID, attemptID, lease, eventType, data)
+func (s *Service) AppendEvent(ctx context.Context, runID, attemptID, lease, eventType string, data any, eventIDs ...string) error {
+	return s.storage.AppendEvent(ctx, runID, attemptID, lease, eventType, data, eventIDs...)
 }
 
 func (s *Service) Complete(ctx context.Context, assignment Assignment, result realy.Result) error {

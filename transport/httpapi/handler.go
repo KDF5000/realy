@@ -232,7 +232,14 @@ func (h *Handler) streamEvents(w http.ResponseWriter, r *http.Request) {
 	defer keepalive.Stop()
 	for {
 		run, err := h.service.GetRun(r.Context(), r.PathValue("runID"))
-		if err != nil || streamTerminal(run.Status) {
+		if err != nil {
+			return
+		}
+		if streamTerminal(run.Status) {
+			values, err := h.service.EventsAfter(r.Context(), r.PathValue("runID"), after)
+			if err == nil {
+				_ = writeEvents(values)
+			}
 			return
 		}
 		select {
@@ -317,15 +324,16 @@ func (h *Handler) renew(w http.ResponseWriter, r *http.Request) {
 }
 func (h *Handler) appendEvent(w http.ResponseWriter, r *http.Request) {
 	var value struct {
-		RunID      string `json:"run_id"`
-		LeaseToken string `json:"lease_token"`
-		Type       string `json:"type"`
-		Data       any    `json:"data,omitempty"`
+		EventID    string          `json:"event_id"`
+		RunID      string          `json:"run_id"`
+		LeaseToken string          `json:"lease_token"`
+		Type       string          `json:"type"`
+		Data       json.RawMessage `json:"data,omitempty"`
 	}
 	if !decode(w, r, &value) {
 		return
 	}
-	respondEmpty(w, h.service.AppendEvent(r.Context(), value.RunID, r.PathValue("attemptID"), value.LeaseToken, value.Type, value.Data))
+	respondEmpty(w, h.service.AppendEvent(r.Context(), value.RunID, r.PathValue("attemptID"), value.LeaseToken, value.Type, value.Data, value.EventID))
 }
 func (h *Handler) uploadArtifact(w http.ResponseWriter, r *http.Request) {
 	assignment := controlplane.Assignment{RunID: r.URL.Query().Get("run_id"), AttemptID: r.PathValue("attemptID"), LeaseToken: r.Header.Get("X-Realy-Lease-Token")}

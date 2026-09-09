@@ -2,7 +2,7 @@
 
 English | [简体中文](README.zh-CN.md)
 
-Realy is a distributed control plane for managing AI agent runtimes across machines. Applications submit work and expose business capabilities; Realy handles runtime discovery, scheduling, execution, isolation, durable events, and results.
+Realy is an SDK and distributed execution component for AI agent runtimes across machines. Applications own their agents, workflows, and business logic; Realy provides runtime discovery, scheduling, execution, workspace preparation, persisted events, and results. The included Web Playground is a reference application for validating integrations.
 
 ```text
 Application / Host
@@ -26,7 +26,7 @@ Realy Node ── Codex / Trae / Custom Runtime
 - Artifact storage on local volumes or S3-compatible object storage
 - Application-defined capabilities through process, CLI, HTTP, RPC, or in-process bindings
 - Host/Node token separation plus tenant and project isolation
-- Embedded Web Agent Playground and the `realyctl` terminal client
+- Embedded Web Agent Playground reference client and the `realyctl` terminal client
 - PostgreSQL-backed coordination for multiple Nodes and Server restarts
 
 ## Quick start
@@ -62,7 +62,7 @@ The expected response is:
 {"status":"ok"}
 ```
 
-Open the Web Console at <http://127.0.0.1:8787/console/> and enter `REALY_HOST_TOKEN` when prompted.
+Open the Web Playground at <http://127.0.0.1:8787/console/> and enter `REALY_HOST_TOKEN` when prompted.
 
 ### 2. Connect a Node
 
@@ -81,14 +81,54 @@ The installer supports macOS and Linux on AMD64 and ARM64. It verifies the relea
 - Linux: systemd user service
 - macOS: LaunchAgent
 
-Once connected, the Node and its runtimes appear in the Console's **Runtimes** view.
+Once connected, the Node and its runtimes appear in the Playground's **Runtimes** view.
 
 ### 3. Create an Agent
 
-Open **Agents** in the Web Console, select a runtime and model, configure a workspace if needed, and start a conversation. An Agent can either:
+Open **Agents** in the Web Playground, select a runtime and model, configure a workspace if needed, and start a conversation. An Agent can either:
 
 - bind to one exact runtime instance on one Node; or
 - use automatic scheduling across compatible runtime instances.
+
+The Playground's Agent profiles, conversation index, and chat UX are demonstration-level application state stored in the browser. They are not Realy Core entities or a persistence contract. A production Host should own its Agent definitions, conversations, permissions, and workflow state, and submit execution Requests to Realy.
+
+## Embed with the Go SDK
+
+Applications can use the HTTP transport directly or wrap it with the convenience SDK client:
+
+```go
+package main
+
+import (
+    "context"
+    "log"
+
+    "github.com/KDF5000/realy"
+    "github.com/KDF5000/realy/sdk"
+    "github.com/KDF5000/realy/transport/httpapi"
+)
+
+func main() {
+    ctx := context.Background()
+    client := sdk.New(httpapi.NewAuthenticatedClient(
+        "https://realy.example.com",
+        "host-token",
+    ))
+
+    run, err := client.Submit(ctx, realy.Request{
+        AgentID:        "code-reviewer",
+        IdempotencyKey: "review-42",
+        Runtime:        realy.RuntimeRequirement{Provider: "codex"},
+        Input:          realy.Input{Type: "task", Version: "1", Prompt: "Review change 42"},
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    log.Printf("queued run %s", run.ID)
+}
+```
+
+Prefer the smallest interface needed by application code: `sdk.Submitter`, `sdk.Runs`, `sdk.Events`, `sdk.Artifacts`, or `sdk.Interactions`. `sdk.Backend` composes the complete surface for the convenience client. This keeps business adapters independent from unrelated Realy features.
 
 ## Deployment
 
@@ -114,7 +154,7 @@ Railway is the simplest way to put a temporary Realy control plane on the public
    Railway injects `PORT`; Realy listens on it automatically. If the database service has a different name, replace `Postgres` in the reference variable.
 
 5. Set the health check path to `/health`, leave Serverless/App Sleeping disabled, and generate a public domain under **Settings → Networking**.
-6. Verify the deployment and open the Console:
+6. Verify the deployment and open the Playground:
 
    ```bash
    curl https://<service>.up.railway.app/health
@@ -154,6 +194,18 @@ By default, Realy Server is published on port `8787`, while PostgreSQL is bound 
 Artifacts use a persistent Docker volume by default. Realy Server can also use S3-compatible storage through `REALY_ARTIFACT_BACKEND=s3` and the `REALY_S3_*` environment variables.
 
 ### Node service operations
+
+Nodes persist unacknowledged events before sending. On restart, they replay events
+under valid leases and mark interrupted attempts as failed; this does not resume
+the agent process. Stale events are discarded with a log entry. Unknown network
+outcomes retain the files and prevent startup from claiming new work.
+
+The default spool is under the OS user configuration directory, in
+`realy/outbox/<server-node-hash>`. Optional Node JSON settings `outbox_root`
+(base directory; the identity subdirectory is always added) and `outbox_max_bytes`
+(default 67108864) control its location and capacity. Capacity exhaustion fails
+the execution rather than growing without bound. Preserve this directory across
+Node updates; it contains lease credentials and private event data.
 
 Linux:
 
@@ -233,11 +285,14 @@ Supported binding styles include:
 
 Events are persisted before delivery and receive an ordered sequence number. The SSE endpoint supports both `after={sequence}` and the standard `Last-Event-ID` header, allowing clients to reconnect without losing or duplicating events.
 
+A stream is complete only after a terminal `run.succeeded`, `run.failed`, or `run.cancelled` event. The Go HTTP client reports an interrupted stream when the connection ends earlier, so Hosts can reconnect from the last processed sequence. A complete assistant message alone is not proof that a Run completed.
+
 Long-running runtimes can create approval or input interactions, pause, and resume after a Host resolves them.
 
 ## Runtime notes
 
 - Codex and Trae use `"protocol": "app-server"` for incremental `assistant.message.delta` events and runtime model discovery.
+- App-server execution succeeds only after the runtime reports `turn/completed`; partial output is retained as events when the protocol ends early, but the Run fails.
 - The legacy `exec` protocol remains available for compatible non-interactive CLIs but only produces complete messages.
 - Trae exec mode cannot use `permission_mode=default`, because a headless process cannot ask for approval. Omit it for the headless default, or use `bypass_permissions` or a headless-compatible `custom` policy.
 - Runtime subprocesses receive a restricted environment by default. Add variables explicitly through `pass_env` or `env` in the Node configuration.
@@ -269,12 +324,13 @@ Use `-memory` only for tests and temporary demos. Production deployments require
 
 When authentication is enabled, both `REALY_HOST_TOKEN` and `REALY_NODE_TOKEN` must be configured. `realyctl` reads `REALY_HOST_TOKEN`; a Node reads the token from its configuration or `REALY_NODE_TOKEN`.
 
-The Web Agent Playground is embedded into the Server binary. After changing files under `transport/httpapi/console/`, rebuild or restart `realy-server` so Go can embed the updated assets. Agent profiles and the conversation index currently live in browser local storage; Runs, events, results, and artifacts are persisted by the Realy API.
+The Web Agent Playground is embedded into the Server binary. After changing files under `transport/httpapi/console/`, rebuild or restart `realy-server` so Go can embed the updated assets. Runs, events, results, and artifacts are persisted by the Realy API.
 
 Pushing a `v*` tag runs the [release workflow](.github/workflows/release.yml), verifies the project, and publishes checksum-protected archives for Linux and macOS on AMD64 and ARM64.
 
 ## Documentation
 
+- [Component boundaries and execution guarantees (Chinese)](docs/component-contract.md)
 - [Architecture and design](docs/design.md)
 - [Example Node configuration](examples/realy-node.example.json)
 - [Releases](https://github.com/KDF5000/realy/releases)

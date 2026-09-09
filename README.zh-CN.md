@@ -2,7 +2,9 @@
 
 [English](README.md) | 简体中文
 
-Realy 是一个跨机器管理 AI Agent Runtime 的分布式控制平面。业务系统负责提交任务并提供业务能力；Realy 负责 Runtime 发现、调度、执行、隔离、持久化事件和结果。
+Realy 是面向跨机器 AI Agent Runtime 的 SDK 和分布式执行基础组件。业务系统拥有 Agent、工作流和业务逻辑；Realy 提供 Runtime 发现、调度、执行、工作区准备、持久化事件和结果。仓库内的 Web Playground 是验证接入可行性的参考应用。
+
+参见 [组件边界与执行契约](docs/component-contract.md)，了解当前保证和限制。
 
 ```text
 业务系统 / Host
@@ -26,7 +28,7 @@ Realy Node ── Codex / Trae / 自定义 Runtime
 - 本地卷或 S3 兼容对象存储 Artifact
 - 通过进程、CLI、HTTP、RPC 或进程内方式接入业务 Capability
 - Host/Node Token 分离，以及 Tenant/Project 隔离
-- 内嵌 Web Agent Playground 和 `realyctl` 终端客户端
+- 内嵌 Web Agent Playground 参考客户端和 `realyctl` 终端客户端
 - 基于 PostgreSQL 的多 Node 协调和 Server 重启恢复
 
 ## 快速开始
@@ -62,7 +64,7 @@ curl http://127.0.0.1:8787/health
 {"status":"ok"}
 ```
 
-打开 <http://127.0.0.1:8787/console/>，首次访问时输入 `REALY_HOST_TOKEN`。
+打开 Web Playground：<http://127.0.0.1:8787/console/>，首次访问时输入 `REALY_HOST_TOKEN`。
 
 ### 2. 接入 Node
 
@@ -81,14 +83,58 @@ curl -fsSL https://raw.githubusercontent.com/KDF5000/realy/main/install.sh \
 - Linux：systemd user service
 - macOS：LaunchAgent
 
-接入成功后，Node 及其 Runtime 会显示在控制台的 **Runtimes** 页面。
+接入成功后，Node 及其 Runtime 会显示在 Playground 的 **Runtimes** 页面。
 
 ### 3. 创建 Agent
 
-打开控制台的 **Agents** 页面，选择 Runtime 和模型，按需设置工作区，然后开始对话。Agent 可以：
+打开 Playground 的 **Agents** 页面，选择 Runtime 和模型，按需设置工作区，然后开始对话。Agent 可以：
 
 - 固定到某个 Node 上的一个具体 Runtime 实例；或
 - 在所有兼容 Runtime 实例之间自动调度。
+
+Playground 中的 Agent Profile、对话索引和聊天交互只是保存在浏览器中的示例业务状态，
+不是 Realy Core 实体或持久化契约。生产业务应自行管理 Agent 定义、对话、权限和工作流，
+再把执行 Request 提交给 Realy。
+
+## 使用 Go SDK 嵌入
+
+业务可以直接使用 HTTP Transport，也可以通过便捷 SDK Client 调用：
+
+```go
+package main
+
+import (
+    "context"
+    "log"
+
+    "github.com/KDF5000/realy"
+    "github.com/KDF5000/realy/sdk"
+    "github.com/KDF5000/realy/transport/httpapi"
+)
+
+func main() {
+    ctx := context.Background()
+    client := sdk.New(httpapi.NewAuthenticatedClient(
+        "https://realy.example.com",
+        "host-token",
+    ))
+
+    run, err := client.Submit(ctx, realy.Request{
+        AgentID:        "code-reviewer",
+        IdempotencyKey: "review-42",
+        Runtime:        realy.RuntimeRequirement{Provider: "codex"},
+        Input:          realy.Input{Type: "task", Version: "1", Prompt: "审查变更 42"},
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    log.Printf("queued run %s", run.ID)
+}
+```
+
+业务代码应优先依赖最小接口：`sdk.Submitter`、`sdk.Runs`、`sdk.Events`、
+`sdk.Artifacts` 或 `sdk.Interactions`。`sdk.Backend` 只用于组合便捷 Client 的完整能力，
+业务 Adapter 不需要依赖无关接口。
 
 ## 部署与运维
 
@@ -114,7 +160,7 @@ Railway 是临时将 Realy Control Plane 暴露到公网最简单的方式。新
    Railway 会注入 `PORT`，Realy 将自动监听该端口。如果数据库 Service 不是 `Postgres`，需要相应修改引用变量中的名称。
 
 5. 将 Health Check Path 设置为 `/health`，不要启用 Serverless/App Sleeping，然后在 **Settings → Networking** 中生成公网域名。
-6. 验证服务并打开控制台：
+6. 验证服务并打开 Playground：
 
    ```bash
    curl https://<service>.up.railway.app/health
@@ -154,6 +200,15 @@ docker compose up -d --build --wait realy-server
 Artifact 默认使用持久化 Docker 卷。也可以设置 `REALY_ARTIFACT_BACKEND=s3` 和 `REALY_S3_*` 环境变量，切换到 S3 兼容对象存储。
 
 ### Node 服务管理
+
+Node 默认会先把未确认事件持久化到磁盘再上报。重启后，它会在领取新任务前补传有效
+Lease 下的事件，并把被中断的旧 Attempt 标记为失败；这不会恢复 Agent 进程。过期事件会
+清理并记录原因，网络结果未知时则保留文件并阻止启动领取新任务。
+
+默认目录是系统用户配置目录下的 `realy/outbox/<server-node-hash>`。Node JSON 可用
+`outbox_root` 设置基目录（身份子目录仍会自动追加），用 `outbox_max_bytes` 设置容量
+（默认 67108864，即 64 MiB）。容量耗尽会终止当前执行，避免磁盘无限增长。升级 Node 时
+应保留此目录；其中包含 Lease 凭据和私有事件数据。
 
 Linux：
 
@@ -233,11 +288,16 @@ Agent 可以使用临时目录、已有本地目录、Git mirror 或隔离 workt
 
 事件会先持久化并分配有序 Sequence，再发送给客户端。SSE 接口同时支持 `after={sequence}` 和标准 `Last-Event-ID` 请求头，因此断线重连不会丢失或重复事件。
 
+只有收到 `run.succeeded`、`run.failed` 或 `run.cancelled` 终态事件，事件流才算完成。
+连接提前结束时，Go HTTP Client 会返回流中断错误，Host 可以从最后处理的 Sequence 重连。
+一条完整的 Assistant Message 本身不代表 Run 已经结束。
+
 长时间运行的 Runtime 可以创建审批或输入 Interaction，暂停执行，并在 Host 处理后恢复。
 
 ## Runtime 说明
 
 - Codex 和 Trae 使用 `"protocol": "app-server"` 产生增量 `assistant.message.delta` 事件并自动发现模型。
+- App Server 只有收到 Runtime 的 `turn/completed` 才判定成功；协议提前结束时保留部分输出事件，但 Run 会失败。
 - 旧的 `exec` 协议仍可兼容非交互式 CLI，但只能返回完整消息。
 - Trae exec 模式不能使用 `permission_mode=default`，因为无头进程无法请求审批。可以省略该配置使用 headless 默认值，或使用 `bypass_permissions`/兼容无头执行的 `custom` 策略。
 - Runtime 子进程默认只继承受限环境。额外变量需要在 Node 配置中通过 `pass_env` 或 `env` 显式声明。
@@ -269,12 +329,13 @@ make postgres-test
 
 启用鉴权时必须同时配置 `REALY_HOST_TOKEN` 和 `REALY_NODE_TOKEN`。`realyctl` 读取 `REALY_HOST_TOKEN`；Node 从配置文件或 `REALY_NODE_TOKEN` 读取 Token。
 
-Web Agent Playground 内嵌在 Server 二进制中。修改 `transport/httpapi/console/` 后需要重新构建或重启 `realy-server`，让 Go 重新嵌入静态资源。Agent Profile 和对话索引目前保存在浏览器 localStorage；Run、Event、Result 和 Artifact 由 Realy API 持久化。
+Web Agent Playground 内嵌在 Server 二进制中。修改 `transport/httpapi/console/` 后需要重新构建或重启 `realy-server`，让 Go 重新嵌入静态资源。Run、Event、Result 和 Artifact 由 Realy API 持久化。
 
 推送 `v*` Tag 会运行 [Release workflow](.github/workflows/release.yml)，验证项目并发布 Linux/macOS、AMD64/ARM64 的带校验和压缩包。
 
 ## 文档
 
+- [组件边界与执行契约](docs/component-contract.md)
 - [架构与设计](docs/design.md)
 - [Node 配置示例](examples/realy-node.example.json)
 - [Releases](https://github.com/KDF5000/realy/releases)

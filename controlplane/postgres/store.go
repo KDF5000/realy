@@ -485,18 +485,42 @@ func (s *Store) Start(ctx context.Context, assignment controlplane.Assignment) e
 	})
 }
 
-func (s *Store) AppendEvent(ctx context.Context, runID, attemptID, lease, eventType string, data any) error {
+func (s *Store) AppendEvent(ctx context.Context, runID, attemptID, lease, eventType string, data any, eventIDs ...string) error {
 	assignment := controlplane.Assignment{RunID: runID, AttemptID: attemptID, LeaseToken: lease}
 	return s.transition(ctx, assignment, func(tx pgx.Tx, run realy.Run) error {
 		if run.Attempt.Status != realy.AttemptRunning {
 			return controlplane.ErrInvalidTransition
 		}
-		return appendEvent(ctx, tx, runID, attemptID, eventType, data)
+		id := controlplane.EventIdentity(attemptID, lease, eventIDs)
+		if id == "" {
+			return appendEvent(ctx, tx, runID, attemptID, eventType, data)
+		}
+		var oldType string
+		var oldData []byte
+		err := tx.QueryRow(ctx, `SELECT type, data FROM realy_events WHERE id=$1`, id).Scan(&oldType, &oldData)
+		if err == nil {
+			return controlplane.SameEvent(oldType, oldData, eventType, data)
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		encoded, err := json.Marshal(data)
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO realy_events (id,run_id,attempt_id,sequence,type,data,created_at) SELECT $1,$2,$3,COALESCE(MAX(sequence),0)+1,$4,$5,now() FROM realy_events WHERE run_id=$2`, id, runID, attemptID, eventType, encoded)
+		return err
 	})
 }
 
 func (s *Store) Complete(ctx context.Context, assignment controlplane.Assignment, result realy.Result) error {
 	return s.transition(ctx, assignment, func(tx pgx.Tx, run realy.Run) error {
+		if run.Status == realy.RunSucceeded && run.Attempt.Status == realy.AttemptSucceeded {
+			if run.Result != nil && controlplane.SameValue(*run.Result, result) {
+				return nil
+			}
+			return fmt.Errorf("%w: completion result differs from the committed result", controlplane.ErrInvalidTransition)
+		}
 		if run.Status == realy.RunCancelling {
 			return controlplane.ErrRunCancelled
 		}
@@ -523,6 +547,12 @@ func (s *Store) Complete(ctx context.Context, assignment controlplane.Assignment
 
 func (s *Store) Fail(ctx context.Context, assignment controlplane.Assignment, cause string) error {
 	return s.transition(ctx, assignment, func(tx pgx.Tx, run realy.Run) error {
+		if run.Status == realy.RunFailed && run.Attempt.Status == realy.AttemptFailed {
+			if run.Error == cause {
+				return nil
+			}
+			return fmt.Errorf("%w: failure cause differs from the committed cause", controlplane.ErrInvalidTransition)
+		}
 		if run.Status == realy.RunCancelling {
 			return controlplane.ErrRunCancelled
 		}
@@ -820,6 +850,12 @@ func (s *Store) transition(ctx context.Context, assignment controlplane.Assignme
 	}
 	if run.Attempt.ID != assignment.AttemptID || assignment.LeaseToken == "" || run.Attempt.LeaseToken != assignment.LeaseToken {
 		return controlplane.ErrInvalidLease
+	}
+	if terminalRunStatus(run.Status) {
+		if err := change(tx, run); err != nil {
+			return err
+		}
+		return tx.Commit(ctx)
 	}
 	if run.Attempt.LeaseExpiresAt == nil || !time.Now().UTC().Before(*run.Attempt.LeaseExpiresAt) {
 		return controlplane.ErrInvalidLease

@@ -593,8 +593,14 @@ function populateMessageBody(body, message, streamingPlainText = false) {
   } else if (streamingPlainText && message.status === "streaming") {
     body.textContent = message.content;
   } else {
-    renderRichText(body, message.content || (message.status === "cancelled" ? "本次执行已取消。" : "没有返回文本结果。"));
-    if (message.status === "failed") body.classList.add("message-error");
+    if (message.content) renderRichText(body, message.content);
+    else if (!message.error) renderRichText(body, message.status === "cancelled" ? "本次执行已取消。" : "没有返回文本结果。");
+    if (message.error) {
+      const error = document.createElement("p");
+      error.className = "message-error";
+      error.textContent = `执行未完成：${message.error}`;
+      body.append(error);
+    }
   }
   const isCurrentRun = state.busy && message.runID && message.runID === state.currentRun?.id;
   if (isCurrentRun && ["pending", "streaming"].includes(message.status) && state.lastActivity) {
@@ -1224,6 +1230,11 @@ function watchRun(runID, assistantMessage, session) {
   let checkingStatus = false;
   const source = new EventSource(`/v1/runs/${encodeURIComponent(runID)}/events/stream`);
   state.currentEventSource = source;
+  source.onopen = () => {
+    if (finished) return;
+    state.lastActivity = "Agent 正在工作";
+    scheduleMessageUpdate(assistantMessage);
+  };
   source.addEventListener("realy.event", (message) => {
     const event = JSON.parse(message.data);
     const isNew = !state.events.some((item) => item.id === event.id);
@@ -1241,9 +1252,12 @@ function watchRun(runID, assistantMessage, session) {
   });
   source.onerror = async () => {
     if (finished || checkingStatus) return;
+    state.lastActivity = "连接中断，正在恢复消息…";
+    scheduleMessageUpdate(assistantMessage);
     checkingStatus = true;
     try {
       const run = await api(`/v1/runs/${encodeURIComponent(runID)}`);
+      if (finished) return;
       if (["succeeded", "failed", "cancelled"].includes(run.status)) {
         finished = true;
         source.close();
@@ -1293,6 +1307,18 @@ async function completeRun(runID, assistantMessage, session) {
     const run = await api(`/v1/runs/${encodeURIComponent(runID)}`);
     const artifacts = await api(`/v1/runs/${encodeURIComponent(runID)}/artifacts`).catch(() => []);
     state.currentRun = run;
+    if (run.status !== "succeeded") {
+      const events = await api(`/v1/runs/${encodeURIComponent(runID)}/events`).catch(() => null);
+      if (events) {
+        let partial = "";
+        for (const event of events) {
+          if (run.attempt?.id && event.attempt_id !== run.attempt.id) continue;
+          if (event.type === "assistant.message.delta") partial += event.data?.delta || "";
+          if (event.type === "assistant.message.completed") partial = event.data?.text || partial;
+        }
+        assistantMessage.content = partial;
+      }
+    }
     const content = run.status === "succeeded" ? run.result?.summary : run.error || `执行${statusLabel(run.status)}`;
     finishAssistant(assistantMessage, session, run.status, content, artifacts);
   } catch (error) {
@@ -1302,7 +1328,8 @@ async function completeRun(runID, assistantMessage, session) {
 
 function finishAssistant(message, session, status, content, artifacts = []) {
   message.status = status;
-  message.content = content;
+  message.error = status === "succeeded" ? "" : content;
+  if (status === "succeeded") message.content = content;
   message.artifacts = artifacts.filter((artifact) => !artifact.type?.includes("instruction"));
   session.updatedAt = new Date().toISOString();
   state.busy = false;

@@ -9,13 +9,11 @@ import (
 
 	"github.com/KDF5000/realy"
 	"github.com/KDF5000/realy/binding"
+	"github.com/KDF5000/realy/sdk"
 )
 
-type Host interface {
-	Submit(context.Context, realy.Request) (realy.Run, error)
-}
 type Adapter struct {
-	Host    Host
+	Host    sdk.Submitter
 	Runtime realy.RuntimeRequirement
 }
 type IssueTask struct {

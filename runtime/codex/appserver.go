@@ -147,6 +147,7 @@ func executeAppServer(ctx context.Context, config Config, execution realy.Execut
 
 	var message strings.Builder
 	turnStarted := false
+	turnCompleted := false
 	for scanner.Scan() {
 		var rpc rpcMessage
 		if err := json.Unmarshal(scanner.Bytes(), &rpc); err != nil {
@@ -195,13 +196,17 @@ func executeAppServer(ctx context.Context, config Config, execution realy.Execut
 				}
 				return realy.Result{}, errors.New(cause)
 			}
+			turnCompleted = true
 			break
 		}
 	}
 	if err := scanner.Err(); err != nil {
 		return realy.Result{}, fmt.Errorf("realy %s: read app-server stream: %w", fork.Name, err)
 	}
-	if !turnStarted || message.Len() == 0 {
+	if !turnStarted || !turnCompleted || message.Len() == 0 {
+		if turnStarted && !turnCompleted {
+			return realy.Result{}, appServerError(fork.Name, errors.New("app-server ended before turn/completed"), stderr.String())
+		}
 		return realy.Result{}, appServerError(fork.Name, errors.New("app-server ended without a final message"), stderr.String())
 	}
 	finalMessage := strings.TrimSpace(message.String())

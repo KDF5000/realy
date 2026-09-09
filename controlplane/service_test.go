@@ -2,6 +2,7 @@ package controlplane_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -103,6 +104,60 @@ func TestExpiredUnstartedLeaseReturnsToQueue(t *testing.T) {
 	}
 	if first.LeaseToken == second.LeaseToken {
 		t.Fatal("requeued assignment reused lease token")
+	}
+}
+
+func TestCompletionAndFailureReportsAreContentIdempotent(t *testing.T) {
+	ctx := context.Background()
+	newAssignment := func(key string) (*controlplane.Service, controlplane.Assignment) {
+		service := controlplane.New(time.Second)
+		if _, err := service.RegisterNode(ctx, controlplane.NodeRegistration{ID: "node", Capacity: 1, Runtimes: []controlplane.Runtime{{Provider: "test"}}}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := service.Submit(ctx, realy.Request{AgentID: "agent", IdempotencyKey: key, Runtime: realy.RuntimeRequirement{Provider: "test"}, Input: realy.Input{Prompt: "work"}}); err != nil {
+			t.Fatal(err)
+		}
+		assignment, err := service.Claim(ctx, "node")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := service.Start(ctx, assignment); err != nil {
+			t.Fatal(err)
+		}
+		return service, assignment
+	}
+
+	successService, success := newAssignment("complete-idempotent")
+	result := realy.Result{Summary: "done", Output: json.RawMessage(`{"b":2,"a":1}`)}
+	if err := successService.Complete(ctx, success, result); err != nil {
+		t.Fatal(err)
+	}
+	if err := successService.Complete(ctx, success, realy.Result{Summary: "done", Output: json.RawMessage(`{ "a": 1, "b": 2 }`)}); err != nil {
+		t.Fatalf("identical completion rejected: %v", err)
+	}
+	if err := successService.Complete(ctx, success, realy.Result{Summary: "different"}); !errors.Is(err, controlplane.ErrInvalidTransition) {
+		t.Fatalf("different completion error=%v", err)
+	}
+	events, _ := successService.Events(ctx, success.RunID)
+	terminal := 0
+	for _, event := range events {
+		if event.Type == "run.succeeded" {
+			terminal++
+		}
+	}
+	if terminal != 1 {
+		t.Fatalf("success events=%d", terminal)
+	}
+
+	failureService, failure := newAssignment("fail-idempotent")
+	if err := failureService.Fail(ctx, failure, "runtime exited"); err != nil {
+		t.Fatal(err)
+	}
+	if err := failureService.Fail(ctx, failure, "runtime exited"); err != nil {
+		t.Fatalf("identical failure rejected: %v", err)
+	}
+	if err := failureService.Fail(ctx, failure, "different"); !errors.Is(err, controlplane.ErrInvalidTransition) {
+		t.Fatalf("different failure error=%v", err)
 	}
 }
 

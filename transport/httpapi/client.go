@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +17,8 @@ import (
 	"github.com/KDF5000/realy"
 	"github.com/KDF5000/realy/controlplane"
 )
+
+var ErrEventStreamInterrupted = errors.New("realy HTTP: event stream ended before a terminal event")
 
 type Client struct {
 	BaseURL string
@@ -211,6 +214,7 @@ func (c *Client) StreamEvents(ctx context.Context, runID string, after int, hand
 	scanner := bufio.NewScanner(response.Body)
 	scanner.Buffer(make([]byte, 64<<10), 2<<20)
 	var data bytes.Buffer
+	terminal := false
 	for scanner.Scan() {
 		line := scanner.Text()
 		if line == "" {
@@ -227,6 +231,7 @@ func (c *Client) StreamEvents(ctx context.Context, runID string, after int, hand
 				if err := handle(event); err != nil {
 					return err
 				}
+				terminal = terminal || event.Type == "run.succeeded" || event.Type == "run.failed" || event.Type == "run.cancelled"
 			}
 			continue
 		}
@@ -237,7 +242,13 @@ func (c *Client) StreamEvents(ctx context.Context, runID string, after int, hand
 			data.WriteString(strings.TrimSpace(strings.TrimPrefix(line, "data:")))
 		}
 	}
-	return scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	if !terminal {
+		return ErrEventStreamInterrupted
+	}
+	return nil
 }
 func (c *Client) CancelRun(ctx context.Context, runID string, request controlplane.CancelRequest) (realy.Run, error) {
 	var out realy.Run
@@ -272,8 +283,12 @@ func (c *Client) Renew(ctx context.Context, value controlplane.Assignment) (cont
 	err := c.do(ctx, http.MethodPost, "/v1/attempts/"+url.PathEscape(value.AttemptID)+"/renew", value, &out)
 	return out, err
 }
-func (c *Client) AppendEvent(ctx context.Context, runID, attemptID, lease, eventType string, data any) error {
-	return c.do(ctx, http.MethodPost, "/v1/attempts/"+url.PathEscape(attemptID)+"/events", map[string]any{"run_id": runID, "lease_token": lease, "type": eventType, "data": data}, nil)
+func (c *Client) AppendEvent(ctx context.Context, runID, attemptID, lease, eventType string, data any, eventIDs ...string) error {
+	id := ""
+	if len(eventIDs) > 0 {
+		id = eventIDs[0]
+	}
+	return c.do(ctx, http.MethodPost, "/v1/attempts/"+url.PathEscape(attemptID)+"/events", map[string]any{"run_id": runID, "lease_token": lease, "type": eventType, "data": data, "event_id": id}, nil)
 }
 func (c *Client) Complete(ctx context.Context, value controlplane.Assignment, result realy.Result) error {
 	return c.do(ctx, http.MethodPost, "/v1/attempts/"+url.PathEscape(value.AttemptID)+"/complete", map[string]any{"assignment": value, "result": result}, nil)
@@ -331,13 +346,23 @@ func (c *Client) do(ctx context.Context, method, path string, input, output any)
 		var protocolErr error
 		switch response.StatusCode {
 		case http.StatusNotFound:
-			protocolErr = controlplane.ErrNotFound
+			if strings.HasPrefix(message, controlplane.ErrNotFound.Error()) {
+				protocolErr = controlplane.ErrNotFound
+			}
 		case http.StatusUnauthorized:
-			protocolErr = controlplane.ErrInvalidLease
+			// Authentication failures (or a proxy's 401) do not establish that
+			// the attempt lease is stale. Durable pending events must be retained.
+			if strings.HasPrefix(message, controlplane.ErrInvalidLease.Error()) {
+				protocolErr = controlplane.ErrInvalidLease
+			}
 		case http.StatusConflict:
-			protocolErr = controlplane.ErrInvalidTransition
+			if strings.HasPrefix(message, controlplane.ErrInvalidTransition.Error()) {
+				protocolErr = controlplane.ErrInvalidTransition
+			}
 		case http.StatusGone:
-			protocolErr = controlplane.ErrRunCancelled
+			if strings.HasPrefix(message, controlplane.ErrRunCancelled.Error()) {
+				protocolErr = controlplane.ErrRunCancelled
+			}
 		}
 		if protocolErr != nil {
 			return fmt.Errorf("%w: %s", protocolErr, message)

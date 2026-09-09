@@ -1,6 +1,7 @@
 {
   "server": "http://127.0.0.1:8787",
   "workspace_root": "/tmp/realy-workspaces",
+  "outbox_max_bytes": 67108864,
   "node": {
     "id": "developer-macbook",
     "labels": {

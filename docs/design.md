@@ -1,10 +1,14 @@
-# Realy 多机器 Agent Runtime 管理平台设计
+# Realy 分布式 Agent 执行组件设计
 
-状态：v0.1 生产核心完成，2026 年 9 月
+状态：最小可发布版本，核心可靠性契约已建立，2026 年 9 月。
+
+当前组件边界和可靠性限制以 [组件契约](component-contract.md) 为准。本文保留初版架构
+设计，不应把能力清单视为所有真实故障场景已经通过生产验证。
 
 ## 1. 产品定位
 
-Realy 是一个可被不同业务项目复用的多机器 Agent Runtime 管理平台。
+Realy 是一个可被不同业务项目复用的分布式 Agent 执行基础组件，提供 SDK 与可独立部署的
+Server / Node。Web Playground 只是验证接口的参考应用，不定义核心 Agent 或聊天模型。
 
 业务项目只需要关注：
 
@@ -16,7 +20,7 @@ Realy 是一个可被不同业务项目复用的多机器 Agent Runtime 管理�
 Realy 负责：
 
 - 管理执行机器；
-- 管理 Codex、Claude 等 Runtime；
+- 管理 Codex、Trae 和自定义 Runtime；
 - 调度、并发、Lease、取消和重试；
 - 工作目录和指令生成；
 - Agent 进程监管；
@@ -83,8 +87,8 @@ run, err := client.Submit(ctx, realy.Request{
 })
 ```
 
-SDK 提供 Submit、Run、Events 和 Nodes 等业务侧接口。未来可以增加流式订阅和取消，
-但业务方不需要直接拼接 HTTP 请求。
+SDK 已提供提交、结果、流式订阅、取消、节点、产物和交互接口；业务应按需要依赖窄接口，
+不必实现完整 Backend，也不必采用 Playground 的数据模型。
 
 ### 3.2 Control Plane
 
@@ -206,7 +210,8 @@ Run queued
 - 完整保留历史，而不是覆盖状态。
 
 Node 对 Attempt 的所有修改都必须携带 Lease Token。Node 在 Runtime 执行期间独立续租，
-不依赖领取任务的主循环。未开始的 Lease 过期后可以重新领取同一 Attempt；运行中 Lease
+不依赖领取任务的主循环，并持续续租到产物上传及最终状态确认。完成与失败上报按内容
+幂等，未知网络结果可安全重试。未开始的 Lease 过期后可以重新领取同一 Attempt；运行中 Lease
 过期后，Reconciler 将旧 Attempt 标记为 `lost`，再根据 `max_attempts` 和 `backoff` 创建
 新 Attempt。Run 指向当前 Attempt，历史 Attempt 与 Event 保留在 PostgreSQL 中。旧 Node
 恢复后携带的 Lease Token 无法修改当前 Attempt，这就是 fencing 边界。
@@ -214,6 +219,7 @@ Node 对 Attempt 的所有修改都必须携带 Lease Token。Node 在 Runtime �
 Run Event 通过 SSE 对外订阅。客户端使用 Event Sequence 作为游标，并通过 `after` 或
 `Last-Event-ID` 恢复连接。Control Plane 只查询 `sequence > after` 的增量记录；Event 在
 发送前已经提交到 PostgreSQL，因此跨进程重启和跨 Control Plane 实例都能断点续传。
+SSE 在终态关闭前会再次读取尾部事件；客户端未读到 Run 终态时不能把 EOF 当作成功。
 
 Node 每个 Capacity Slot 有独立的 Claim Loop。退出时先停止领取并等待在途 Runtime drain；
 超时或第二个退出信号会取消执行。Unix 上 Runtime、Binding 与 Git 子进程均运行在独立
@@ -384,9 +390,8 @@ Realy 已实现真实 Codex Runtime Adapter，使用 OpenAI 官方稳定的 `cod
 实现遵循 [OpenAI Codex Developer Commands](https://developers.openai.com/codex/cli/reference)
 中 `codex exec` 的非交互、JSONL 和最终消息文件契约。
 
-当前先采用 `codex exec`，因为它是稳定且适合 CI/daemon 的接口。Multica 现有的 Codex
-App Server Backend 支持更完整的 Session Resume、细粒度 Item Event 和 Approval；这些
-能力将在基础分布式执行稳定后按需迁移，而不是直接复制整个旧实现。
+当前也已支持 `app-server` 协议的增量输出和模型发现。每次执行仍启动新线程，尚未提供
+原生 Session Resume；通用 Interaction 接口存在并不意味着每个 Runtime 已接通原生审批。
 
 ### 10.2 TraeCode
 
@@ -479,7 +484,7 @@ MCP，也不需要为业务语义增加 Connector。Node 侧用 `CapabilityBindi
 切流时保留 Multica 当前 daemon 作为回退路径，按 Workspace 或任务类型选择 Realy；完成
 行为对比后，再删除 Multica 中已经被 Realy 覆盖的调度、Workspace 和进程监管代码。
 
-## 15. 当前 v0.1 验收标准
+## 15. 当前 MVP 验收范围
 
 - Host SDK 可以提交、列出、取消 Run，并读取 Attempt、Event、Interaction 和 Artifact；
 - 多个 Node 按 Runtime Provider、语义版本、健康状态、Label、Capability 和 Capacity 调度；
@@ -493,14 +498,14 @@ MCP，也不需要为业务语义增加 Connector。Node 侧用 `CapabilityBindi
 - 真实 Codex 可以通过 Control Plane、Node 和文件 Tool Bridge 完成任务；
 - PostgreSQL + HTTP E2E 覆盖两个 Node 之间的失联恢复和 Capability 结果重放。
 
-## 16. 明确延后到 v0.2 的能力
+## 16. 按真实场景再引入的能力
 
-- Claude 等其他 Runtime Adapter；
-- Codex App Server 原生 Session Resume（v0.1 已有通用 Session ID 与 Interaction）；
+- 其他 Runtime Adapter；
+- Codex App Server 原生 Session Resume（当前已有通用 Session ID 与 Interaction）；
 - Capability JSON Schema 校验；
 - CLI 包签名、安全安装和自动升级；
 - MCP Binding；
-- Web 管理界面。
+- Playground 已实现，作为参考应用维护；不扩展为核心业务控制台。
 
-这些能力不阻塞 v0.1 的多机器 Runtime 管理闭环，也不改变 Control Plane、Node、SDK、
+这些能力不阻塞当前多机器 Runtime 执行闭环，也不改变 Control Plane、Node、SDK、
 Workspace、Blob Store 和 Binding 的边界。

@@ -244,7 +244,7 @@ func (s *MemoryStorage) Start(_ context.Context, assignment Assignment) error {
 	return nil
 }
 
-func (s *MemoryStorage) AppendEvent(_ context.Context, runID, attemptID, lease, eventType string, data any) error {
+func (s *MemoryStorage) AppendEvent(_ context.Context, runID, attemptID, lease, eventType string, data any, eventIDs ...string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	run, err := s.authorize(runID, attemptID, lease)
@@ -254,16 +254,42 @@ func (s *MemoryStorage) AppendEvent(_ context.Context, runID, attemptID, lease, 
 	if run.Attempt.Status != realy.AttemptRunning {
 		return ErrInvalidTransition
 	}
+	id := EventIdentity(attemptID, lease, eventIDs)
+	if id != "" {
+		for _, event := range s.events[runID] {
+			if event.ID == id {
+				return SameEvent(event.Type, event.Data, eventType, data)
+			}
+		}
+	}
+	if _, err := json.Marshal(data); err != nil {
+		return err
+	}
 	s.appendEvent(run, eventType, data)
+	if id != "" {
+		s.events[runID][len(s.events[runID])-1].ID = id
+	}
 	return nil
 }
 
 func (s *MemoryStorage) Complete(_ context.Context, assignment Assignment, result realy.Result) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	run, err := s.authorize(assignment.RunID, assignment.AttemptID, assignment.LeaseToken)
-	if err != nil {
-		return err
+	run := s.runs[assignment.RunID]
+	if run == nil {
+		return ErrNotFound
+	}
+	if run.Attempt.ID != assignment.AttemptID || assignment.LeaseToken == "" || run.Attempt.LeaseToken != assignment.LeaseToken {
+		return ErrInvalidLease
+	}
+	if run.Status == realy.RunSucceeded && run.Attempt.Status == realy.AttemptSucceeded {
+		if run.Result != nil && SameValue(*run.Result, result) {
+			return nil
+		}
+		return fmt.Errorf("%w: completion result differs from the committed result", ErrInvalidTransition)
+	}
+	if run.Attempt.LeaseExpiresAt == nil || !time.Now().UTC().Before(*run.Attempt.LeaseExpiresAt) {
+		return ErrInvalidLease
 	}
 	if run.Attempt.Status != realy.AttemptRunning {
 		return ErrInvalidTransition
@@ -283,9 +309,21 @@ func (s *MemoryStorage) Complete(_ context.Context, assignment Assignment, resul
 func (s *MemoryStorage) Fail(_ context.Context, assignment Assignment, cause string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	run, err := s.authorize(assignment.RunID, assignment.AttemptID, assignment.LeaseToken)
-	if err != nil {
-		return err
+	run := s.runs[assignment.RunID]
+	if run == nil {
+		return ErrNotFound
+	}
+	if run.Attempt.ID != assignment.AttemptID || assignment.LeaseToken == "" || run.Attempt.LeaseToken != assignment.LeaseToken {
+		return ErrInvalidLease
+	}
+	if run.Status == realy.RunFailed && run.Attempt.Status == realy.AttemptFailed {
+		if run.Error == cause {
+			return nil
+		}
+		return fmt.Errorf("%w: failure cause differs from the committed cause", ErrInvalidTransition)
+	}
+	if run.Attempt.LeaseExpiresAt == nil || !time.Now().UTC().Before(*run.Attempt.LeaseExpiresAt) {
+		return ErrInvalidLease
 	}
 	if run.Attempt.Status != realy.AttemptRunning && run.Attempt.Status != realy.AttemptLeased {
 		return ErrInvalidTransition
@@ -523,6 +561,10 @@ func (s *MemoryStorage) authorize(runID, attemptID, lease string) (*realy.Run, e
 		return nil, ErrNotFound
 	}
 	if run.Attempt.ID != attemptID || lease == "" || run.Attempt.LeaseToken != lease {
+		return nil, ErrInvalidLease
+	}
+	if run.Attempt.LeaseExpiresAt == nil || !time.Now().UTC().Before(*run.Attempt.LeaseExpiresAt) {
+		s.requeueExpired(run, time.Now().UTC())
 		return nil, ErrInvalidLease
 	}
 	return run, nil
