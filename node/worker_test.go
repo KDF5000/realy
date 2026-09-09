@@ -68,7 +68,7 @@ func TestWorkerRetriesLostCompletionResponse(t *testing.T) {
 	service := controlplane.New(time.Second)
 	cp := &lostCompletionResponse{ControlPlane: service}
 	worker := &node.Worker{
-		Registration: controlplane.NodeRegistration{ID: "completion-node", Runtimes: []controlplane.Runtime{{Provider: "test"}}, Capacity: 1},
+		Registration: controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "completion-node", Runtimes: []controlplane.Runtime{{Provider: "test"}}, Capacity: 1},
 		ControlPlane: cp,
 		Executors: node.ExecutorMap{"test": relay.ExecutorFunc(func(context.Context, relay.Execution) (relay.Result, error) {
 			return relay.Result{Summary: "done"}, nil
@@ -108,7 +108,7 @@ func TestWorkerRenewsLeaseThroughArtifactUpload(t *testing.T) {
 		t.Fatal(err)
 	}
 	worker := &node.Worker{
-		Registration: controlplane.NodeRegistration{ID: "artifact-node", Runtimes: []controlplane.Runtime{{Provider: "test"}}, Capacity: 1},
+		Registration: controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "artifact-node", Runtimes: []controlplane.Runtime{{Provider: "test"}}, Capacity: 1},
 		ControlPlane: cp,
 		Executors: node.ExecutorMap{"test": relay.ExecutorFunc(func(context.Context, relay.Execution) (relay.Result, error) {
 			return relay.Result{Summary: "done", Artifacts: []relay.Artifact{{Name: "result.txt", Ref: artifactPath}}}, nil
@@ -144,7 +144,7 @@ func TestWorkerRetriesLostResponseWithoutDuplicatingOutput(t *testing.T) {
 	service := controlplane.New(time.Second)
 	cp := &lostEventResponse{ControlPlane: service}
 	worker := &node.Worker{
-		Registration: controlplane.NodeRegistration{ID: "retry-node", Runtimes: []controlplane.Runtime{{Provider: "test"}}, Capacity: 1},
+		Registration: controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "retry-node", Runtimes: []controlplane.Runtime{{Provider: "test"}}, Capacity: 1},
 		ControlPlane: cp,
 		Executors: node.ExecutorMap{"test": relay.ExecutorFunc(func(ctx context.Context, execution relay.Execution) (relay.Result, error) {
 			execution.Emit(ctx, "assistant.message.delta", map[string]string{"delta": "hello"})
@@ -189,7 +189,7 @@ func TestEventDeliveryFailureCannotCompleteRun(t *testing.T) {
 	service := controlplane.New(time.Second)
 	cause := errors.New("event connection interrupted")
 	worker := &node.Worker{
-		Registration: controlplane.NodeRegistration{ID: "event-node", Runtimes: []controlplane.Runtime{{Provider: "test"}}, Capacity: 1},
+		Registration: controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "event-node", Runtimes: []controlplane.Runtime{{Provider: "test"}}, Capacity: 1},
 		ControlPlane: failingEvents{ControlPlane: service, cause: cause},
 		Executors: node.ExecutorMap{"test": relay.ExecutorFunc(func(ctx context.Context, execution relay.Execution) (relay.Result, error) {
 			execution.Emit(ctx, "assistant.message.delta", map[string]string{"delta": "hello"})
@@ -224,7 +224,7 @@ func TestWorkerRenewsLeaseDuringLongExecution(t *testing.T) {
 	ctx := context.Background()
 	service := controlplane.New(30 * time.Millisecond)
 	worker := &node.Worker{
-		Registration: controlplane.NodeRegistration{ID: "node", Runtimes: []controlplane.Runtime{{Provider: "slow"}}, Capacity: 1},
+		Registration: controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "node", Runtimes: []controlplane.Runtime{{Provider: "slow"}}, Capacity: 1},
 		ControlPlane: service,
 		Executors: node.ExecutorMap{"slow": relay.ExecutorFunc(func(ctx context.Context, _ relay.Execution) (relay.Result, error) {
 			select {
@@ -256,7 +256,7 @@ func TestWorkerStopsExecutionAndAcknowledgesCancellation(t *testing.T) {
 	service := controlplane.New(60 * time.Millisecond)
 	started := make(chan struct{})
 	worker := &node.Worker{
-		Registration: controlplane.NodeRegistration{ID: "node", Runtimes: []controlplane.Runtime{{Provider: "blocking"}}, Capacity: 1},
+		Registration: controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "node", Runtimes: []controlplane.Runtime{{Provider: "blocking"}}, Capacity: 1},
 		ControlPlane: service,
 		Executors: node.ExecutorMap{"blocking": relay.ExecutorFunc(func(ctx context.Context, _ relay.Execution) (relay.Result, error) {
 			close(started)
@@ -326,7 +326,7 @@ func TestRunPoolUsesConfiguredCapacityConcurrently(t *testing.T) {
 		return relay.Result{Summary: "done"}, nil
 	})
 	worker := &node.Worker{
-		Registration: controlplane.NodeRegistration{ID: "node", Runtimes: []controlplane.Runtime{{Provider: "parallel"}}, Capacity: 2},
+		Registration: controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "node", Runtimes: []controlplane.Runtime{{Provider: "parallel"}}, Capacity: 2},
 		ControlPlane: service,
 		Executors:    node.ExecutorMap{"parallel": executor},
 	}

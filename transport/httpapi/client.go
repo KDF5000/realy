@@ -41,6 +41,25 @@ func NewClient(baseURL string) *Client {
 	return &Client{BaseURL: strings.TrimRight(baseURL, "/"), HTTP: &http.Client{Timeout: 30 * time.Second}}
 }
 
+func (c *Client) Health(ctx context.Context) error {
+	var out struct {
+		Status string `json:"status"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/health", nil, &out); err != nil {
+		return err
+	}
+	if out.Status != "ok" {
+		return fmt.Errorf("relay HTTP: unhealthy server status %q", out.Status)
+	}
+	return nil
+}
+
+func (c *Client) BuildInfo(ctx context.Context) (relay.BuildInfo, error) {
+	var out relay.BuildInfo
+	err := c.do(ctx, http.MethodGet, "/version", nil, &out)
+	return out, err
+}
+
 func (c *Client) Submit(ctx context.Context, request relay.Request) (relay.Run, error) {
 	var out relay.Run
 	err := c.do(ctx, http.MethodPost, "/v1/runs", request, &out)
@@ -362,6 +381,10 @@ func (c *Client) do(ctx context.Context, method, path string, input, output any)
 		case http.StatusGone:
 			if strings.HasPrefix(message, controlplane.ErrRunCancelled.Error()) {
 				protocolErr = controlplane.ErrRunCancelled
+			}
+		case http.StatusUpgradeRequired:
+			if strings.HasPrefix(message, controlplane.ErrIncompatibleProtocol.Error()) {
+				protocolErr = controlplane.ErrIncompatibleProtocol
 			}
 		}
 		if protocolErr != nil {

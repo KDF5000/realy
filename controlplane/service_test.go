@@ -14,9 +14,9 @@ import (
 func TestSchedulerMatchesRuntimeLabelsAndCapabilities(t *testing.T) {
 	ctx := context.Background()
 	service := controlplane.New(time.Minute)
-	_, _ = service.RegisterNode(ctx, controlplane.NodeRegistration{ID: "wrong-runtime", Labels: map[string]string{"pool": "engineering"}, Runtimes: []controlplane.Runtime{{Provider: "claude"}}, Capabilities: []controlplane.Capability{{Name: "issue.read", Version: "1", Kind: "exec"}}, Capacity: 1})
-	_, _ = service.RegisterNode(ctx, controlplane.NodeRegistration{ID: "missing-tool", Labels: map[string]string{"pool": "engineering"}, Runtimes: []controlplane.Runtime{{Provider: "codex"}}, Capacity: 1})
-	_, _ = service.RegisterNode(ctx, controlplane.NodeRegistration{ID: "matching", Labels: map[string]string{"pool": "engineering"}, Runtimes: []controlplane.Runtime{{Provider: "codex"}}, Capabilities: []controlplane.Capability{{Name: "issue.read", Version: "1", Kind: "exec"}}, Capacity: 1})
+	_, _ = service.RegisterNode(ctx, controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "wrong-runtime", Labels: map[string]string{"pool": "engineering"}, Runtimes: []controlplane.Runtime{{Provider: "claude"}}, Capabilities: []controlplane.Capability{{Name: "issue.read", Version: "1", Kind: "exec"}}, Capacity: 1})
+	_, _ = service.RegisterNode(ctx, controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "missing-tool", Labels: map[string]string{"pool": "engineering"}, Runtimes: []controlplane.Runtime{{Provider: "codex"}}, Capacity: 1})
+	_, _ = service.RegisterNode(ctx, controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "matching", Labels: map[string]string{"pool": "engineering"}, Runtimes: []controlplane.Runtime{{Provider: "codex"}}, Capabilities: []controlplane.Capability{{Name: "issue.read", Version: "1", Kind: "exec"}}, Capacity: 1})
 	run, err := service.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "one", Runtime: relay.RuntimeRequirement{Provider: "codex", Labels: map[string]string{"pool": "engineering"}}, Input: relay.Input{Prompt: "work"}, Capabilities: []relay.CapabilityGrant{{Name: "issue.read", Version: "1"}}})
 	if err != nil {
 		t.Fatal(err)
@@ -50,14 +50,25 @@ func TestSchedulerMatchesRuntimeLabelsAndCapabilities(t *testing.T) {
 	}
 }
 
+func TestRegisterNodeRejectsIncompatibleProtocol(t *testing.T) {
+	service := controlplane.New(time.Minute)
+	_, err := service.RegisterNode(context.Background(), controlplane.NodeRegistration{
+		ID: "old-node", ProtocolVersion: "0", Capacity: 1,
+		Runtimes: []controlplane.Runtime{{Provider: "test"}},
+	})
+	if !errors.Is(err, controlplane.ErrIncompatibleProtocol) {
+		t.Fatalf("RegisterNode error = %v, want incompatible protocol", err)
+	}
+}
+
 func TestSchedulerCanBindRunToRuntimeInstance(t *testing.T) {
 	ctx := context.Background()
 	service := controlplane.New(time.Minute)
-	first, err := service.RegisterNode(ctx, controlplane.NodeRegistration{ID: "node-a", Runtimes: []controlplane.Runtime{{Provider: "codex"}}, Capacity: 1})
+	first, err := service.RegisterNode(ctx, controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "node-a", Runtimes: []controlplane.Runtime{{Provider: "codex"}}, Capacity: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := service.RegisterNode(ctx, controlplane.NodeRegistration{ID: "node-b", Runtimes: []controlplane.Runtime{{Provider: "codex"}}, Capacity: 1})
+	second, err := service.RegisterNode(ctx, controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "node-b", Runtimes: []controlplane.Runtime{{Provider: "codex"}}, Capacity: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +94,7 @@ func TestSchedulerCanBindRunToRuntimeInstance(t *testing.T) {
 func TestExpiredUnstartedLeaseReturnsToQueue(t *testing.T) {
 	ctx := context.Background()
 	service := controlplane.New(time.Nanosecond)
-	_, err := service.RegisterNode(ctx, controlplane.NodeRegistration{ID: "node", Runtimes: []controlplane.Runtime{{Provider: "codex"}}, Capacity: 1})
+	_, err := service.RegisterNode(ctx, controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "node", Runtimes: []controlplane.Runtime{{Provider: "codex"}}, Capacity: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +122,7 @@ func TestCompletionAndFailureReportsAreContentIdempotent(t *testing.T) {
 	ctx := context.Background()
 	newAssignment := func(key string) (*controlplane.Service, controlplane.Assignment) {
 		service := controlplane.New(time.Second)
-		if _, err := service.RegisterNode(ctx, controlplane.NodeRegistration{ID: "node", Capacity: 1, Runtimes: []controlplane.Runtime{{Provider: "test"}}}); err != nil {
+		if _, err := service.RegisterNode(ctx, controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "node", Capacity: 1, Runtimes: []controlplane.Runtime{{Provider: "test"}}}); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := service.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: key, Runtime: relay.RuntimeRequirement{Provider: "test"}, Input: relay.Input{Prompt: "work"}}); err != nil {
@@ -164,7 +175,7 @@ func TestCompletionAndFailureReportsAreContentIdempotent(t *testing.T) {
 func TestRunningAttemptRecoveryCreatesNewAttemptAndFencesOldLease(t *testing.T) {
 	ctx := context.Background()
 	service := controlplane.New(10 * time.Millisecond)
-	_, err := service.RegisterNode(ctx, controlplane.NodeRegistration{ID: "node", Runtimes: []controlplane.Runtime{{Provider: "codex"}}, Capacity: 1})
+	_, err := service.RegisterNode(ctx, controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "node", Runtimes: []controlplane.Runtime{{Provider: "codex"}}, Capacity: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +224,7 @@ func TestRunningAttemptRecoveryCreatesNewAttemptAndFencesOldLease(t *testing.T) 
 func TestRunningAttemptWithoutRetryFailsAfterLeaseExpiry(t *testing.T) {
 	ctx := context.Background()
 	service := controlplane.New(5 * time.Millisecond)
-	_, _ = service.RegisterNode(ctx, controlplane.NodeRegistration{ID: "node", Runtimes: []controlplane.Runtime{{Provider: "codex"}}, Capacity: 1})
+	_, _ = service.RegisterNode(ctx, controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "node", Runtimes: []controlplane.Runtime{{Provider: "codex"}}, Capacity: 1})
 	run, _ := service.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "no-retry", Runtime: relay.RuntimeRequirement{Provider: "codex"}, Input: relay.Input{Prompt: "work"}})
 	assignment, _ := service.Claim(ctx, "node")
 	if err := service.Start(ctx, assignment); err != nil {
@@ -235,7 +246,7 @@ func TestRunningAttemptWithoutRetryFailsAfterLeaseExpiry(t *testing.T) {
 func TestNodeStateBecomesOfflineWithoutHeartbeat(t *testing.T) {
 	ctx := context.Background()
 	service := controlplane.NewWithOptions(controlplane.NewMemoryStorage(), controlplane.Options{LeaseTTL: time.Second, NodeOfflineAfter: 5 * time.Millisecond})
-	_, _ = service.RegisterNode(ctx, controlplane.NodeRegistration{ID: "node", Runtimes: []controlplane.Runtime{{Provider: "codex"}}, Capacity: 1})
+	_, _ = service.RegisterNode(ctx, controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "node", Runtimes: []controlplane.Runtime{{Provider: "codex"}}, Capacity: 1})
 	nodes, _ := service.Nodes(ctx)
 	if nodes[0].State != controlplane.NodeOnline {
 		t.Fatalf("new node state = %q", nodes[0].State)
@@ -274,7 +285,7 @@ func TestQueuedRunCancellationIsImmediateAndIdempotent(t *testing.T) {
 func TestRunningCancellationIsDeliveredByLeaseRenewal(t *testing.T) {
 	ctx := context.Background()
 	service := controlplane.New(time.Second)
-	_, _ = service.RegisterNode(ctx, controlplane.NodeRegistration{ID: "node", Runtimes: []controlplane.Runtime{{Provider: "codex"}}, Capacity: 1})
+	_, _ = service.RegisterNode(ctx, controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "node", Runtimes: []controlplane.Runtime{{Provider: "codex"}}, Capacity: 1})
 	run, _ := service.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "cancel-running", Runtime: relay.RuntimeRequirement{Provider: "codex"}, Input: relay.Input{Prompt: "work"}})
 	assignment, _ := service.Claim(ctx, "node")
 	if err := service.Start(ctx, assignment); err != nil {

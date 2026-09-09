@@ -17,7 +17,7 @@ func TestProducerEventDeduplication(t *testing.T) {
 	server := httptest.NewServer(httpapi.NewHandler(service))
 	defer server.Close()
 	client := httpapi.NewClient(server.URL)
-	if _, err := client.RegisterNode(ctx, controlplane.NodeRegistration{ID: "dedup-node", Capacity: 1, Runtimes: []controlplane.Runtime{{Provider: "test"}}}); err != nil {
+	if _, err := client.RegisterNode(ctx, controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "dedup-node", Capacity: 1, Runtimes: []controlplane.Runtime{{Provider: "test"}}}); err != nil {
 		t.Fatal(err)
 	}
 	run, err := client.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "dedup", Runtime: relay.RuntimeRequirement{Provider: "test"}, Input: relay.Input{Prompt: "work"}})

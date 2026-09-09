@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"time"
 
+	"github.com/KDF5000/relay"
 	"github.com/KDF5000/relay/controlplane"
 	controlplanepostgres "github.com/KDF5000/relay/controlplane/postgres"
 	"github.com/KDF5000/relay/transport/httpapi"
@@ -26,7 +28,12 @@ func main() {
 	nodeToken := flag.String("node-token", os.Getenv("RELAY_NODE_TOKEN"), "node bearer token")
 	tenantID := flag.String("tenant", envOr("RELAY_TENANT_ID", "default"), "tenant assigned to the host token")
 	projectID := flag.String("project", envOr("RELAY_PROJECT_ID", "default"), "project assigned to the host token")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+	if *showVersion {
+		fmt.Println(relay.VersionLine("relay-server"))
+		return
+	}
 	var blobs controlplane.BlobStore
 	var err error
 	if *artifactBackend == "s3" {

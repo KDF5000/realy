@@ -21,6 +21,7 @@ Relay Node ── Codex / Trae / 自定义 Runtime
 ## 核心能力
 
 - 多机器 Node 注册、心跳、容量和 Runtime Inventory
+- 严格的 Server/Node 协议握手，以及独立展示的产品版本
 - 固定到指定 Runtime 实例，或根据 Provider 和 Capability 自动调度
 - 原生 Codex、Trae Runtime 适配，支持流式输出和模型发现
 - 持久化 Run、Attempt、Lease、重试、取消、超时和有序 SSE 事件
@@ -56,12 +57,14 @@ RELAY_NODE_TOKEN=replace-with-a-long-random-node-token
 ```bash
 docker compose up -d --build --wait
 curl http://127.0.0.1:8787/health
+curl http://127.0.0.1:8787/version
 ```
 
 预期响应：
 
 ```json
 {"status":"ok"}
+{"version":"dev","protocol_version":"1"}
 ```
 
 打开 Web Playground：<http://127.0.0.1:8787/console/>，首次访问时输入 `RELAY_HOST_TOKEN`。
@@ -242,6 +245,8 @@ tail -f ~/.cache/relay/logs/node.log
 
 ```bash
 make build-relayctl
+./bin/relayctl --version
+./bin/relayctl doctor
 ./bin/relayctl runtime list
 ./bin/relayctl run submit --provider codex --prompt "检查当前代码仓库"
 ./bin/relayctl run submit --provider codex --runtime-id developer-node/codex --prompt "固定到指定 Runtime"
@@ -258,6 +263,17 @@ make build-relayctl
 ```
 
 通过 `RELAY_SERVER_URL` 或全局 `--server` 参数连接其他 Control Plane。`run submit` 默认持续接收有序 SSE 事件；使用 `--watch=false` 可以在提交后立即返回。
+
+`relayctl doctor` 默认只读，会依次检查 Server 健康状态和版本、Host 鉴权、协议兼容性、
+在线 Runtime Inventory 以及模型发现。需要使用真实 Runtime 验证完整 Run 和 Artifact 链路时，
+必须显式启用执行探针：
+
+```bash
+relayctl doctor --execute --provider codex
+relayctl doctor --execute --runtime-id developer-node/codex --timeout 5m
+```
+
+执行探针会调用选中的 AI Provider，可能产生用量。
 
 ## 核心概念
 
@@ -296,6 +312,9 @@ Agent 可以使用临时目录、已有本地目录、Git mirror 或隔离 workt
 
 ## Runtime 说明
 
+- Relay 分别管理产品版本和 Node 协议版本。`relay-server --version`、`relay-node --version`
+  和 `relayctl --version` 会同时输出两者。协议版本不一致的 Node 注册会收到 HTTP
+  `426 Upgrade Required`；产品版本仅用于诊断，不参与调度。
 - Codex 和 Trae 使用 `"protocol": "app-server"` 产生增量 `assistant.message.delta` 事件并自动发现模型。
 - App Server 只有收到 Runtime 的 `turn/completed` 才判定成功；协议提前结束时保留部分输出事件，但 Run 会失败。
 - 旧的 `exec` 协议仍可兼容非交互式 CLI，但只能返回完整消息。
@@ -340,4 +359,5 @@ Web Agent Playground 内嵌在 Server 二进制中。修改 `transport/httpapi/c
 - [Node 配置示例](examples/relay-node.example.json)
 - [Releases](https://github.com/KDF5000/relay/releases)
 
-首个 Host 集成是 Multica Adapter。它通过 `multica capability invoke --protocol relay-v1` 暴露 `issue.read@1`，而 Relay Core 不需要理解 Issue 或项目管理语义。
+Host 产品可以通过 Binding 暴露自己的 Capability，而 Relay Core 不理解具体业务语义。
+下一款用于产品级验证的应用会与 Relay Core 分开设计。

@@ -50,12 +50,12 @@ func main() {
 	}
 
 	compatible := &node.Worker{
-		Registration: controlplane.NodeRegistration{ID: "node-macos-codex", Labels: map[string]string{"os": "darwin", "pool": "engineering"}, Runtimes: []controlplane.Runtime{{Provider: "mock", Version: "1"}}, Capacity: 2},
+		Registration: controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "node-macos-codex", Labels: map[string]string{"os": "darwin", "pool": "engineering"}, Runtimes: []controlplane.Runtime{{Provider: "mock", Version: "1"}}, Capacity: 2},
 		ControlPlane: transport, Bindings: registry,
 		Executors: node.ExecutorMap{"mock": demoExecutor{workRoot: workRoot}},
 	}
 	incompatible := &node.Worker{
-		Registration: controlplane.NodeRegistration{ID: "node-linux-claude", Labels: map[string]string{"os": "linux", "pool": "engineering"}, Runtimes: []controlplane.Runtime{{Provider: "claude", Version: "1"}}, Capacity: 2},
+		Registration: controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "node-linux-claude", Labels: map[string]string{"os": "linux", "pool": "engineering"}, Runtimes: []controlplane.Runtime{{Provider: "claude", Version: "1"}}, Capacity: 2},
 		ControlPlane: transport, Bindings: binding.NewRegistry(),
 		Executors: node.ExecutorMap{"claude": demoExecutor{workRoot: workRoot}},
 	}

@@ -19,6 +19,7 @@ Relay Node ── Codex / Trae / Custom Runtime
 ## Highlights
 
 - Multi-machine Node registration, heartbeats, capacity, and runtime inventory
+- Strict Server/Node protocol handshake with independently reported product versions
 - Fixed runtime-instance assignment or automatic scheduling by provider and capability
 - Native Codex and Trae runtime adapters with streaming output and model discovery
 - Durable runs, attempts, leases, retries, cancellation, timeouts, and ordered SSE events
@@ -54,12 +55,14 @@ Start the stack and verify it:
 ```bash
 docker compose up -d --build --wait
 curl http://127.0.0.1:8787/health
+curl http://127.0.0.1:8787/version
 ```
 
 The expected response is:
 
 ```json
 {"status":"ok"}
+{"version":"dev","protocol_version":"1"}
 ```
 
 Open the Web Playground at <http://127.0.0.1:8787/console/> and enter `RELAY_HOST_TOKEN` when prompted.
@@ -239,6 +242,8 @@ Build `relayctl` from source, or use the binary installed by `install.sh`:
 
 ```bash
 make build-relayctl
+./bin/relayctl --version
+./bin/relayctl doctor
 ./bin/relayctl runtime list
 ./bin/relayctl run submit --provider codex --prompt "Inspect this repository"
 ./bin/relayctl run submit --provider codex --runtime-id developer-node/codex --prompt "Run on this exact runtime"
@@ -255,6 +260,17 @@ make build-relayctl
 ```
 
 Set `RELAY_SERVER_URL` or pass the global `--server` option to connect to another control plane. `run submit` watches ordered SSE events by default; use `--watch=false` to return after submission.
+
+`relayctl doctor` is read-only by default. It checks Server health and version, Host authentication,
+protocol compatibility, online Runtime inventory, and model discovery. To validate the complete Run
+and Artifact path with a real Runtime, opt in explicitly:
+
+```bash
+relayctl doctor --execute --provider codex
+relayctl doctor --execute --runtime-id developer-node/codex --timeout 5m
+```
+
+The execution probe invokes the selected AI provider and may consume quota.
 
 ## Core concepts
 
@@ -291,6 +307,9 @@ Long-running runtimes can create approval or input interactions, pause, and resu
 
 ## Runtime notes
 
+- Relay has separate product and Node protocol versions. `relay-server --version`, `relay-node --version`,
+  and `relayctl --version` print both. A Node registration with a different protocol version is rejected
+  with HTTP `426 Upgrade Required`; product-version differences are diagnostic and do not affect scheduling.
 - Codex and Trae use `"protocol": "app-server"` for incremental `assistant.message.delta` events and runtime model discovery.
 - App-server execution succeeds only after the runtime reports `turn/completed`; partial output is retained as events when the protocol ends early, but the Run fails.
 - The legacy `exec` protocol remains available for compatible non-interactive CLIs but only produces complete messages.
@@ -335,4 +354,5 @@ Pushing a `v*` tag runs the [release workflow](.github/workflows/release.yml), v
 - [Example Node configuration](examples/relay-node.example.json)
 - [Releases](https://github.com/KDF5000/relay/releases)
 
-The first Host integration is the Multica adapter. It exposes `issue.read@1` through `multica capability invoke --protocol relay-v1`, while Relay Core remains unaware of issue or project-management semantics.
+Host products can expose their own capabilities through bindings while Relay Core remains unaware of
+their domain semantics. The next product-level validation will be designed separately from Relay Core.

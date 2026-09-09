@@ -99,12 +99,13 @@ func (s *Store) RegisterNode(ctx context.Context, registration controlplane.Node
 	capabilities, _ := json.Marshal(registration.Capabilities)
 	now := time.Now().UTC()
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO relay_nodes (id, labels, runtimes, capabilities, capacity, last_seen)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO relay_nodes (id, version, protocol_version, labels, runtimes, capabilities, capacity, last_seen)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (id) DO UPDATE SET
+			version = EXCLUDED.version, protocol_version = EXCLUDED.protocol_version,
 			labels = EXCLUDED.labels, runtimes = EXCLUDED.runtimes,
 			capabilities = EXCLUDED.capabilities, capacity = EXCLUDED.capacity,
-			last_seen = EXCLUDED.last_seen`, registration.ID, labels, runtimes, capabilities, registration.Capacity, now)
+			last_seen = EXCLUDED.last_seen`, registration.ID, registration.Version, registration.ProtocolVersion, labels, runtimes, capabilities, registration.Capacity, now)
 	if err != nil {
 		return controlplane.Node{}, err
 	}
@@ -906,7 +907,7 @@ func scanRun(row rowScanner) (relay.Run, error) {
 }
 
 const nodeSelect = `
-	SELECT n.id, n.labels, n.runtimes, n.capabilities, n.capacity, n.last_seen,
+	SELECT n.id, n.version, n.protocol_version, n.labels, n.runtimes, n.capabilities, n.capacity, n.last_seen,
 	       (SELECT count(*) FROM relay_attempts a
 	        WHERE a.node_id = n.id AND
 	              a.status IN ('running', 'leased') AND a.lease_expires_at > now()) AS active
@@ -915,7 +916,7 @@ const nodeSelect = `
 func scanNode(row rowScanner) (controlplane.Node, error) {
 	var node controlplane.Node
 	var labels, runtimes, capabilities []byte
-	err := row.Scan(&node.ID, &labels, &runtimes, &capabilities, &node.Capacity, &node.LastSeen, &node.Active)
+	err := row.Scan(&node.ID, &node.Version, &node.ProtocolVersion, &labels, &runtimes, &capabilities, &node.Capacity, &node.LastSeen, &node.Active)
 	if err != nil {
 		return controlplane.Node{}, err
 	}

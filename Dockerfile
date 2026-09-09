@@ -7,13 +7,15 @@ WORKDIR /src
 ARG GOPROXY=https://goproxy.cn,direct
 RUN go env -w GOPROXY="${GOPROXY}"
 
+ARG VERSION=dev
+
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -trimpath \
-    -ldflags="-s -w" \
+    -ldflags="-s -w -X github.com/KDF5000/relay.Version=${VERSION}" \
     -o /out/relay-server \
     ./cmd/relay-server
 

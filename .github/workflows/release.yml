@@ -48,9 +48,10 @@ jobs:
           CGO_ENABLED: "0"
         run: |
           mkdir -p package dist
-          go build -trimpath -ldflags="-s -w" -o package/relay-node ./cmd/relay-node
+          ldflags="-s -w -X github.com/KDF5000/relay.Version=${GITHUB_REF_NAME}"
+          go build -trimpath -ldflags="$ldflags" -o package/relay-node ./cmd/relay-node
           go build -trimpath -ldflags="-s -w" -o package/relay-tool ./cmd/relay-tool
-          go build -trimpath -ldflags="-s -w" -o package/relayctl ./cmd/relayctl
+          go build -trimpath -ldflags="$ldflags" -o package/relayctl ./cmd/relayctl
           tar -C package -czf "dist/relay_${GOOS}_${GOARCH}.tar.gz" relay-node relay-tool relayctl
       - uses: actions/upload-artifact@v4
         with:

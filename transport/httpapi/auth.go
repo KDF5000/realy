@@ -30,7 +30,7 @@ func authenticate(next http.Handler, auth Authenticator) http.Handler {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/health" || r.URL.Path == "/console" || strings.HasPrefix(r.URL.Path, "/console/") || r.URL.Path == "/v1/console/session" {
+		if r.URL.Path == "/health" || r.URL.Path == "/version" || r.URL.Path == "/console" || strings.HasPrefix(r.URL.Path, "/console/") || r.URL.Path == "/v1/console/session" {
 			next.ServeHTTP(w, r)
 			return
 		}

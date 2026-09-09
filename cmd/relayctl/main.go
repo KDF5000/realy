@@ -39,16 +39,27 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	global := flag.NewFlagSet("relayctl", flag.ContinueOnError)
 	global.SetOutput(stderr)
 	server := global.String("server", envOr("RELAY_SERVER_URL", defaultServerURL), "Relay control plane URL")
+	showVersion := global.Bool("version", false, "print version and exit")
 	if err := global.Parse(args); err != nil {
 		return err
+	}
+	if *showVersion {
+		fmt.Fprintln(stdout, relay.VersionLine("relayctl"))
+		return nil
 	}
 	remaining := global.Args()
 	if len(remaining) == 0 {
 		printUsage(stdout)
 		return nil
 	}
-	client := sdk.New(httpapi.NewAuthenticatedClient(*server, os.Getenv("RELAY_HOST_TOKEN")))
+	transport := httpapi.NewAuthenticatedClient(*server, os.Getenv("RELAY_HOST_TOKEN"))
+	client := sdk.New(transport)
 	switch remaining[0] {
+	case "version":
+		fmt.Fprintln(stdout, relay.VersionLine("relayctl"))
+		return nil
+	case "doctor":
+		return doctor(ctx, transport, client, remaining[1:], stdout, stderr)
 	case "runtime", "runtimes":
 		if len(remaining) == 1 || remaining[1] == "list" {
 			return runtimeList(ctx, client, remaining[min(2, len(remaining)):], stdout, stderr)
@@ -151,6 +162,106 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	return fmt.Errorf("unknown command %q", strings.Join(remaining, " "))
 }
 
+func doctor(ctx context.Context, transport *httpapi.Client, client *sdk.Client, args []string, stdout, stderr io.Writer) error {
+	flags := flag.NewFlagSet("doctor", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	execute := flags.Bool("execute", false, "run a real agent task and verify its artifact (may consume provider quota)")
+	provider := flags.String("provider", "", "runtime provider; defaults to the first healthy runtime")
+	runtimeID := flags.String("runtime-id", "", "bind the probe to an exact runtime instance")
+	model := flags.String("model", "", "runtime model override")
+	timeout := flags.Duration("timeout", 3*time.Minute, "maximum time for the execution probe")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if flags.NArg() != 0 {
+		return errors.New("doctor accepts flags only")
+	}
+	if *timeout <= 0 {
+		return errors.New("--timeout must be positive")
+	}
+	if err := transport.Health(ctx); err != nil {
+		return fmt.Errorf("server health: %w", err)
+	}
+	fmt.Fprintln(stdout, "[ok] server health")
+	info, err := transport.BuildInfo(ctx)
+	if err != nil {
+		return fmt.Errorf("server version: %w", err)
+	}
+	fmt.Fprintf(stdout, "[ok] server %s · protocol %s\n", info.Version, info.ProtocolVersion)
+	if info.ProtocolVersion != relay.ProtocolVersion {
+		return fmt.Errorf("protocol mismatch: relayctl=%s server=%s", relay.ProtocolVersion, info.ProtocolVersion)
+	}
+	nodes, err := client.Nodes(ctx)
+	if err != nil {
+		return fmt.Errorf("host authentication or node inventory: %w", err)
+	}
+	fmt.Fprintln(stdout, "[ok] host authentication")
+	type candidate struct {
+		node    controlplane.Node
+		runtime controlplane.Runtime
+	}
+	var candidates []candidate
+	for _, node := range nodes {
+		if node.State != controlplane.NodeOnline || node.ProtocolVersion != relay.ProtocolVersion {
+			continue
+		}
+		for _, runtime := range node.Runtimes {
+			if runtime.State == "unhealthy" || (*provider != "" && runtime.Provider != *provider) || (*runtimeID != "" && runtime.ID != *runtimeID) {
+				continue
+			}
+			candidates = append(candidates, candidate{node: node, runtime: runtime})
+		}
+	}
+	if len(candidates) == 0 {
+		return fmt.Errorf("no healthy runtime matches provider=%q runtime-id=%q", *provider, *runtimeID)
+	}
+	selected := candidates[0]
+	if *provider == "" {
+		*provider = selected.runtime.Provider
+	}
+	fmt.Fprintf(stdout, "[ok] runtime %s on %s · runtime %s · node %s\n", selected.runtime.Provider, selected.node.ID, emptyDash(selected.runtime.Version), emptyDash(selected.node.Version))
+	modelCount := len(selected.runtime.ModelCatalog)
+	if modelCount == 0 {
+		modelCount = len(selected.runtime.Models)
+	}
+	if modelCount == 0 && selected.runtime.DefaultModel == "" {
+		fmt.Fprintln(stdout, "[warn] runtime did not advertise a model catalog")
+	} else {
+		fmt.Fprintf(stdout, "[ok] model discovery · %d advertised\n", max(1, modelCount))
+	}
+	if !*execute {
+		fmt.Fprintln(stdout, "[skip] execution probe; use --execute to test Run and Artifact delivery")
+		return nil
+	}
+	fmt.Fprintln(stdout, "[run] execution probe may consume provider quota")
+	probeCtx, cancel := context.WithTimeout(ctx, *timeout)
+	defer cancel()
+	queued, err := client.Submit(probeCtx, relay.Request{
+		AgentID:        "relayctl-doctor",
+		IdempotencyKey: fmt.Sprintf("relayctl-doctor-%d", time.Now().UnixNano()),
+		Runtime:        relay.RuntimeRequirement{ID: selected.runtime.ID, Provider: *provider, Model: *model},
+		Source:         relay.Source{Kind: "relayctl.doctor"},
+		Input:          relay.Input{Type: "task", Version: "1", Prompt: "Relay connectivity check. Do not modify files or call tools. Reply with exactly: RELAY_DOCTOR_OK"},
+		Principal:      relay.Principal{Type: "system", ID: "relayctl-doctor"},
+		Timeout:        (*timeout).String(),
+	})
+	if err != nil {
+		return fmt.Errorf("submit execution probe: %w", err)
+	}
+	if err := watchRun(probeCtx, client, queued.ID, 500*time.Millisecond, stdout); err != nil {
+		return fmt.Errorf("execution probe: %w", err)
+	}
+	artifacts, err := client.Artifacts(probeCtx, queued.ID)
+	if err != nil {
+		return fmt.Errorf("artifact probe: %w", err)
+	}
+	if len(artifacts) == 0 {
+		return errors.New("artifact probe: run succeeded without an artifact")
+	}
+	fmt.Fprintf(stdout, "[ok] artifact delivery · %d artifact(s)\n", len(artifacts))
+	return nil
+}
+
 func runtimeList(ctx context.Context, client *sdk.Client, args []string, stdout, stderr io.Writer) error {
 	flags := flag.NewFlagSet("runtime list", flag.ContinueOnError)
 	flags.SetOutput(stderr)
@@ -170,25 +281,27 @@ func runtimeList(ctx context.Context, client *sdk.Client, args []string, stdout,
 		return printJSON(stdout, nodes)
 	}
 	writer := tabwriter.NewWriter(stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(writer, "NODE\tSTATE\tRUNTIME\tINSTANCE\tVERSION\tLOAD\tCAPABILITIES\tLAST SEEN")
+	fmt.Fprintln(writer, "NODE\tSTATE\tNODE VERSION\tPROTOCOL\tRUNTIME\tINSTANCE\tRUNTIME VERSION\tLOAD\tCAPABILITIES\tLAST SEEN")
 	for _, node := range nodes {
 		runtimes := append([]controlplane.Runtime(nil), node.Runtimes...)
 		sort.Slice(runtimes, func(i, j int) bool { return runtimes[i].Provider < runtimes[j].Provider })
 		capabilities := capabilityInventory(node.Capabilities)
 		if len(runtimes) == 0 {
-			fmt.Fprintf(writer, "%s\t%s\t-\t-\t-\t%d/%d\t%s\t%s\n", node.ID, node.State, node.Active, node.Capacity, capabilities, relativeTime(node.LastSeen))
+			fmt.Fprintf(writer, "%s\t%s\t%s\t%s\t-\t-\t-\t%d/%d\t%s\t%s\n", node.ID, node.State, emptyDash(node.Version), emptyDash(node.ProtocolVersion), node.Active, node.Capacity, capabilities, relativeTime(node.LastSeen))
 			continue
 		}
 		for index, runtime := range runtimes {
-			nodeID, state, load, caps, seen := "", "", "", "", ""
+			nodeID, state, nodeVersion, protocol, load, caps, seen := "", "", "", "", "", "", ""
 			if index == 0 {
 				nodeID = node.ID
 				state = node.State
+				nodeVersion = emptyDash(node.Version)
+				protocol = emptyDash(node.ProtocolVersion)
 				load = fmt.Sprintf("%d/%d", node.Active, node.Capacity)
 				caps = capabilities
 				seen = relativeTime(node.LastSeen)
 			}
-			fmt.Fprintf(writer, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", nodeID, state, runtime.Provider, emptyDash(runtime.ID), emptyDash(runtime.Version), load, caps, seen)
+			fmt.Fprintf(writer, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", nodeID, state, nodeVersion, protocol, runtime.Provider, emptyDash(runtime.ID), emptyDash(runtime.Version), load, caps, seen)
 		}
 	}
 	return writer.Flush()
@@ -556,6 +669,8 @@ func printUsage(output io.Writer) {
 	fmt.Fprint(output, `Relay terminal workbench
 
 Usage:
+  relayctl --version
+  relayctl [--server URL] doctor [--execute] [options]
   relayctl [--server URL] runtime list [--json]
   relayctl [--server URL] run submit --prompt TEXT [options]
   relayctl [--server URL] run list

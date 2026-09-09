@@ -43,6 +43,9 @@ func NewHandlerWithAuth(service *controlplane.Service, auth Authenticator) *Hand
 	h.mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
+	h.mux.HandleFunc("GET /version", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, relay.CurrentBuild())
+	})
 	h.mux.HandleFunc("POST /v1/runs", h.submit)
 	h.mux.HandleFunc("GET /v1/runs", h.listRuns)
 	h.mux.HandleFunc("GET /v1/sessions/{sessionID}/runs", h.sessionRuns)
@@ -461,6 +464,9 @@ func writeError(w http.ResponseWriter, err error) {
 	}
 	if errors.Is(err, controlplane.ErrRunCancelled) {
 		status = http.StatusGone
+	}
+	if errors.Is(err, controlplane.ErrIncompatibleProtocol) {
+		status = http.StatusUpgradeRequired
 	}
 	writeJSON(w, status, map[string]string{"error": err.Error()})
 }

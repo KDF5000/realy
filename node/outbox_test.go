@@ -21,7 +21,7 @@ func assigned(t *testing.T) (*controlplane.Service, controlplane.Assignment) {
 	t.Helper()
 	ctx := context.Background()
 	cp := controlplane.New(30 * time.Second)
-	if _, err := cp.RegisterNode(ctx, controlplane.NodeRegistration{ID: "outbox-node", Capacity: 1, Runtimes: []controlplane.Runtime{{Provider: "test"}}}); err != nil {
+	if _, err := cp.RegisterNode(ctx, controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "outbox-node", Capacity: 1, Runtimes: []controlplane.Runtime{{Provider: "test"}}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := cp.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "outbox", Runtime: relay.RuntimeRequirement{Provider: "test"}, Input: relay.Input{Prompt: "not persisted in outbox"}}); err != nil {
@@ -186,7 +186,7 @@ func TestOutboxBoundsAndRecoveryFailures(t *testing.T) {
 func TestOutboxExpiredLeaseDoesNotReplay(t *testing.T) {
 	ctx := context.Background()
 	cp := controlplane.New(20 * time.Millisecond)
-	if _, err := cp.RegisterNode(ctx, controlplane.NodeRegistration{ID: "expired-node", Capacity: 1, Runtimes: []controlplane.Runtime{{Provider: "test"}}}); err != nil {
+	if _, err := cp.RegisterNode(ctx, controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "expired-node", Capacity: 1, Runtimes: []controlplane.Runtime{{Provider: "test"}}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := cp.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "expired", Runtime: relay.RuntimeRequirement{Provider: "test"}, Input: relay.Input{Prompt: "work"}}); err != nil {

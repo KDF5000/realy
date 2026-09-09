@@ -82,7 +82,12 @@ func main() {
 	poll := flag.Duration("poll", time.Second, "queue polling interval")
 	heartbeat := flag.Duration("heartbeat", 5*time.Second, "node heartbeat interval")
 	drainTimeout := flag.Duration("drain-timeout", 30*time.Second, "maximum graceful shutdown drain time")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+	if *showVersion {
+		fmt.Println(relay.VersionLine("relay-node"))
+		return
+	}
 	if *poll <= 0 || *heartbeat <= 0 || *drainTimeout <= 0 {
 		log.Fatal("poll, heartbeat, and drain intervals must be positive")
 	}
@@ -94,6 +99,8 @@ func main() {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		log.Fatal(err)
 	}
+	cfg.Node.Version = relay.Version
+	cfg.Node.ProtocolVersion = relay.ProtocolVersion
 	registry := binding.NewRegistry()
 	for _, item := range cfg.Bindings {
 		var provider relay.CapabilityProvider

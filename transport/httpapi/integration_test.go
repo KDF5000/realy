@@ -67,6 +67,23 @@ func TestConsoleAssetsAndHostSession(t *testing.T) {
 	}
 }
 
+func TestVersionAndProtocolMismatch(t *testing.T) {
+	server := httptest.NewServer(httpapi.NewHandler(controlplane.New(time.Minute)))
+	defer server.Close()
+	client := httpapi.NewClient(server.URL)
+	info, err := client.BuildInfo(context.Background())
+	if err != nil || info.ProtocolVersion != relay.ProtocolVersion {
+		t.Fatalf("build info = %+v, %v", info, err)
+	}
+	_, err = client.RegisterNode(context.Background(), controlplane.NodeRegistration{
+		ID: "old-node", ProtocolVersion: "0", Capacity: 1,
+		Runtimes: []controlplane.Runtime{{Provider: "test"}},
+	})
+	if !errors.Is(err, controlplane.ErrIncompatibleProtocol) {
+		t.Fatalf("register error = %v, want incompatible protocol", err)
+	}
+}
+
 func TestListEndpointsEncodeEmptyArrays(t *testing.T) {
 	service := controlplane.New(time.Minute)
 	server := httptest.NewServer(httpapi.NewHandler(service))
@@ -114,7 +131,7 @@ func TestAuthenticatedIsolationArtifactsAndInteractions(t *testing.T) {
 	hostA := httpapi.NewAuthenticatedClient(server.URL, "host-a")
 	hostB := httpapi.NewAuthenticatedClient(server.URL, "host-b")
 	node := httpapi.NewAuthenticatedClient(server.URL, "node")
-	if _, err := node.RegisterNode(ctx, controlplane.NodeRegistration{ID: "node-a", Capacity: 1, Runtimes: []controlplane.Runtime{{Provider: "mock", State: "healthy"}}}); err != nil {
+	if _, err := node.RegisterNode(ctx, controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "node-a", Capacity: 1, Runtimes: []controlplane.Runtime{{Provider: "mock", State: "healthy"}}}); err != nil {
 		t.Fatal(err)
 	}
 	request := relay.Request{AgentID: "agent", IdempotencyKey: "same-key", Runtime: relay.RuntimeRequirement{Provider: "mock"}, Input: relay.Input{Prompt: "work"}, SessionID: "session-1"}
@@ -174,7 +191,7 @@ func TestHostAndNodeProtocol(t *testing.T) {
 	defer server.Close()
 	client := httpapi.NewClient(server.URL)
 	ctx := context.Background()
-	if _, err := client.RegisterNode(ctx, controlplane.NodeRegistration{ID: "node", Runtimes: []controlplane.Runtime{{Provider: "mock"}}, Capacity: 1}); err != nil {
+	if _, err := client.RegisterNode(ctx, controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "node", Runtimes: []controlplane.Runtime{{Provider: "mock"}}, Capacity: 1}); err != nil {
 		t.Fatal(err)
 	}
 	run, err := client.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "one", Runtime: relay.RuntimeRequirement{Provider: "mock", Model: "model-a"}, Input: relay.Input{Prompt: "work"}})
@@ -241,7 +258,7 @@ func TestCancellationProtocol(t *testing.T) {
 	defer server.Close()
 	client := httpapi.NewClient(server.URL)
 	ctx := context.Background()
-	_, _ = client.RegisterNode(ctx, controlplane.NodeRegistration{ID: "node", Runtimes: []controlplane.Runtime{{Provider: "mock"}}, Capacity: 1})
+	_, _ = client.RegisterNode(ctx, controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "node", Runtimes: []controlplane.Runtime{{Provider: "mock"}}, Capacity: 1})
 	run, err := client.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "cancel-http", Runtime: relay.RuntimeRequirement{Provider: "mock"}, Input: relay.Input{Prompt: "work"}})
 	if err != nil {
 		t.Fatal(err)
@@ -280,7 +297,7 @@ func TestEventStreamDeliversNewEventsUntilTerminalState(t *testing.T) {
 	client := httpapi.NewClient(server.URL)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	_, _ = client.RegisterNode(ctx, controlplane.NodeRegistration{ID: "node", Runtimes: []controlplane.Runtime{{Provider: "mock"}}, Capacity: 1})
+	_, _ = client.RegisterNode(ctx, controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "node", Runtimes: []controlplane.Runtime{{Provider: "mock"}}, Capacity: 1})
 	run, err := client.Submit(ctx, relay.Request{AgentID: "agent", IdempotencyKey: "stream-live", Runtime: relay.RuntimeRequirement{Provider: "mock"}, Input: relay.Input{Prompt: "work"}})
 	if err != nil {
 		t.Fatal(err)

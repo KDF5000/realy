@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"time"
 
@@ -13,11 +14,12 @@ import (
 )
 
 var (
-	ErrNotFound          = errors.New("relay control plane: not found")
-	ErrNoAssignment      = errors.New("relay control plane: no matching assignment")
-	ErrInvalidLease      = errors.New("relay control plane: invalid lease")
-	ErrInvalidTransition = errors.New("relay control plane: invalid transition")
-	ErrRunCancelled      = errors.New("relay control plane: run cancelled")
+	ErrNotFound             = errors.New("relay control plane: not found")
+	ErrNoAssignment         = errors.New("relay control plane: no matching assignment")
+	ErrInvalidLease         = errors.New("relay control plane: invalid lease")
+	ErrInvalidTransition    = errors.New("relay control plane: invalid transition")
+	ErrRunCancelled         = errors.New("relay control plane: run cancelled")
+	ErrIncompatibleProtocol = errors.New("relay control plane: incompatible protocol")
 )
 
 // Storage is the durable state boundary of the distributed control plane.
@@ -97,6 +99,9 @@ func NewWithOptions(storage Storage, options Options) *Service {
 }
 
 func (s *Service) RegisterNode(ctx context.Context, registration NodeRegistration) (Node, error) {
+	if registration.ProtocolVersion != relay.ProtocolVersion {
+		return Node{}, fmt.Errorf("%w: server=%s node=%q", ErrIncompatibleProtocol, relay.ProtocolVersion, registration.ProtocolVersion)
+	}
 	if registration.ID == "" || len(registration.Runtimes) == 0 {
 		return Node{}, errors.New("node ID and at least one runtime are required")
 	}

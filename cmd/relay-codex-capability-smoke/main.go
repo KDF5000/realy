@@ -58,7 +58,7 @@ func main() {
 	transport := httpapi.NewClient(server.URL)
 	host := sdk.New(transport)
 	worker := &node.Worker{
-		Registration: controlplane.NodeRegistration{ID: "local-codex-capability-smoke", Runtimes: []controlplane.Runtime{{Provider: "codex", Version: version}}, Capacity: 1},
+		Registration: controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "local-codex-capability-smoke", Runtimes: []controlplane.Runtime{{Provider: "codex", Version: version}}, Capacity: 1},
 		ControlPlane: transport,
 		Bindings:     registry,
 		Executors: node.ExecutorMap{"codex": runtimecodex.Executor{Config: runtimecodex.Config{

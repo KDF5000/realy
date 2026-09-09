@@ -68,11 +68,13 @@ type Capability struct {
 }
 
 type NodeRegistration struct {
-	ID           string            `json:"id"`
-	Labels       map[string]string `json:"labels,omitempty"`
-	Runtimes     []Runtime         `json:"runtimes"`
-	Capabilities []Capability      `json:"capabilities,omitempty"`
-	Capacity     int               `json:"capacity"`
+	ID              string            `json:"id"`
+	Version         string            `json:"version,omitempty"`
+	ProtocolVersion string            `json:"protocol_version"`
+	Labels          map[string]string `json:"labels,omitempty"`
+	Runtimes        []Runtime         `json:"runtimes"`
+	Capabilities    []Capability      `json:"capabilities,omitempty"`
+	Capacity        int               `json:"capacity"`
 }
 
 type Node struct {

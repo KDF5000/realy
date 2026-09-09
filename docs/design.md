@@ -106,6 +106,10 @@ Control Plane 是整个机器集群的事实来源，负责：
 
 Control Plane 不启动 Agent 子进程，也不保存宿主业务凭证。
 
+Server 与 Node 使用独立于产品发布版本的协议版本。Node 注册必须携带协议版本，Server
+仅接受完全一致的版本并对不兼容注册返回 HTTP 426，避免不兼容 Node 领取任务。产品版本
+只用于 `/version`、CLI、Runtime Inventory 和 Playground 中的诊断展示，不参与调度。
+
 ### 3.3 Relay Node
 
 每台执行机器运行一个 Relay Node。Node 负责：
@@ -139,6 +143,8 @@ Node 注册时上报：
 ```json
 {
   "id": "node-macos-01",
+  "version": "v0.3.0",
+  "protocol_version": "1",
   "labels": {
     "os": "darwin",
     "pool": "engineering"

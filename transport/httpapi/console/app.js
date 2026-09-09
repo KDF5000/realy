@@ -11,6 +11,7 @@ const state = {
   messages: readStorage(STORAGE.messages, {}),
   selection: readStorage(STORAGE.selection, {}),
   nodes: [],
+  buildInfo: null,
   nodesLoaded: false,
   nodesError: "",
   refreshingNodes: false,
@@ -396,7 +397,10 @@ function renderHeader() {
   connection.replaceChildren();
   const dot = document.createElement("span");
   dot.className = `status-dot ${state.nodesError ? "offline" : state.nodesLoaded ? "online" : ""}`;
-  connection.append(dot, document.createTextNode(state.nodesError ? "连接中断" : state.nodesLoaded ? "已连接控制平面" : "正在连接…"));
+  const connectedLabel = state.buildInfo
+    ? `Relay ${state.buildInfo.version} · 协议 ${state.buildInfo.protocol_version}`
+    : "已连接控制平面";
+  connection.append(dot, document.createTextNode(state.nodesError ? "连接中断" : state.nodesLoaded ? connectedLabel : "正在连接…"));
 }
 
 function workspaceLabel(workspace) {
@@ -841,7 +845,7 @@ function renderRuntimes() {
       const name = document.createElement("strong");
       name.textContent = runtime.provider;
       const info = document.createElement("small");
-      info.textContent = `${node.id} · ${runtime.version || "版本未知"} · ${node.active || 0}/${node.capacity}`;
+      info.textContent = `${node.id} · Node ${node.version || "dev"} · 协议 ${node.protocol_version || "未知"} · Runtime ${runtime.version || "版本未知"} · ${node.active || 0}/${node.capacity}`;
       copy.append(name, info);
       const badge = document.createElement("span");
       badge.className = "runtime-badge";
@@ -1005,7 +1009,7 @@ function renderRuntimeManagement() {
     const mark = document.createElement("span"); mark.className = "node-symbol"; mark.append(icon("node"));
     const copy = document.createElement("span"); copy.className = "node-card-head-copy";
     const name = document.createElement("strong"); name.textContent = node.id;
-    const meta = document.createElement("small"); meta.textContent = `${node.runtimes?.length || 0} 个 Runtime · 最近心跳 ${formatRelative(node.last_seen)}`;
+    const meta = document.createElement("small"); meta.textContent = `${node.runtimes?.length || 0} 个 Runtime · Node ${node.version || "dev"} · 协议 ${node.protocol_version || "未知"} · 最近心跳 ${formatRelative(node.last_seen)}`;
     copy.append(name, meta);
     const badge = document.createElement("span"); badge.className = `node-state-badge ${node.state === "online" ? "" : "offline"}`; badge.textContent = node.state === "online" ? "在线" : "离线";
     const loadGroup = document.createElement("span"); loadGroup.className = "node-load-group";
@@ -1549,6 +1553,15 @@ async function loadNodes() {
   }
 }
 
+async function loadBuildInfo() {
+  try {
+    state.buildInfo = await api("/version");
+    renderHeader();
+  } catch {
+    state.buildInfo = null;
+  }
+}
+
 async function restoreActiveRun() {
   if (state.restoredRun) return;
   state.restoredRun = true;
@@ -1683,5 +1696,6 @@ if (!currentAgent() && state.agents.length) state.selection.agentID = currentSes
 if (!location.hash) history.replaceState(null, "", "#chat");
 render();
 if (currentMessages().length) scrollToBottom(false);
+loadBuildInfo();
 loadNodes();
 window.setInterval(loadNodes, 15_000);

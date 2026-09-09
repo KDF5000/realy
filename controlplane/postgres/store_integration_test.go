@@ -28,7 +28,7 @@ func TestMultiNodeCrashRecoveryOverHTTP(t *testing.T) {
 	client := httpapi.NewClient(server.URL)
 	ctx := context.Background()
 	for _, id := range []string{"node-crash", "node-recovery"} {
-		if _, err := client.RegisterNode(ctx, controlplane.NodeRegistration{ID: id, Capacity: 1, Runtimes: []controlplane.Runtime{{Provider: "mock", Version: "1.2.0", State: "healthy"}}}); err != nil {
+		if _, err := client.RegisterNode(ctx, controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: id, Capacity: 1, Runtimes: []controlplane.Runtime{{Provider: "mock", Version: "1.2.0", State: "healthy"}}}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -93,12 +93,38 @@ func TestMultiNodeCrashRecoveryOverHTTP(t *testing.T) {
 	}
 }
 
+func TestPostgresPersistsNodeBuildInformation(t *testing.T) {
+	store := openTestStore(t)
+	service := controlplane.NewWithStorage(store, time.Minute)
+	ctx := context.Background()
+	registered, err := service.RegisterNode(ctx, controlplane.NodeRegistration{
+		ID:              "versioned-node",
+		Version:         "v0.3.0-test",
+		ProtocolVersion: relay.ProtocolVersion,
+		Capacity:        1,
+		Runtimes:        []controlplane.Runtime{{Provider: "mock", Version: "1.2.3"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if registered.Version != "v0.3.0-test" || registered.ProtocolVersion != relay.ProtocolVersion {
+		t.Fatalf("registered node build info = version %q protocol %q", registered.Version, registered.ProtocolVersion)
+	}
+	nodes, err := service.Nodes(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodes) != 1 || nodes[0].Version != registered.Version || nodes[0].ProtocolVersion != registered.ProtocolVersion {
+		t.Fatalf("stored nodes = %+v", nodes)
+	}
+}
+
 func TestPostgresControlPlaneLifecycleAndConcurrentClaim(t *testing.T) {
 	store := openTestStore(t)
 	service := controlplane.NewWithStorage(store, time.Minute)
 	ctx := context.Background()
 	for _, nodeID := range []string{"node-a", "node-b"} {
-		if _, err := service.RegisterNode(ctx, controlplane.NodeRegistration{
+		if _, err := service.RegisterNode(ctx, controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion,
 			ID: nodeID, Capacity: 1,
 			Runtimes:     []controlplane.Runtime{{Provider: "codex", Version: "test"}},
 			Capabilities: []controlplane.Capability{{Name: "issue.read", Version: "1", Kind: "exec"}},
@@ -196,7 +222,7 @@ func TestPostgresExpiredLeaseCanBeReclaimed(t *testing.T) {
 	store := openTestStore(t)
 	service := controlplane.NewWithStorage(store, 100*time.Millisecond)
 	ctx := context.Background()
-	_, err := service.RegisterNode(ctx, controlplane.NodeRegistration{ID: "node", Capacity: 1, Runtimes: []controlplane.Runtime{{Provider: "codex"}}})
+	_, err := service.RegisterNode(ctx, controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "node", Capacity: 1, Runtimes: []controlplane.Runtime{{Provider: "codex"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +259,7 @@ func TestPostgresRecoversExpiredRunningAttemptAndFencesOldNode(t *testing.T) {
 	store := openTestStore(t)
 	service := controlplane.NewWithStorage(store, 100*time.Millisecond)
 	ctx := context.Background()
-	_, err := service.RegisterNode(ctx, controlplane.NodeRegistration{ID: "node", Capacity: 1, Runtimes: []controlplane.Runtime{{Provider: "codex"}}})
+	_, err := service.RegisterNode(ctx, controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "node", Capacity: 1, Runtimes: []controlplane.Runtime{{Provider: "codex"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,7 +340,7 @@ func TestPostgresCancellationAndTimeout(t *testing.T) {
 	store := openTestStore(t)
 	service := controlplane.NewWithStorage(store, time.Second)
 	ctx := context.Background()
-	_, err := service.RegisterNode(ctx, controlplane.NodeRegistration{ID: "node", Capacity: 1, Runtimes: []controlplane.Runtime{{Provider: "codex"}}})
+	_, err := service.RegisterNode(ctx, controlplane.NodeRegistration{ProtocolVersion: relay.ProtocolVersion, ID: "node", Capacity: 1, Runtimes: []controlplane.Runtime{{Provider: "codex"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
